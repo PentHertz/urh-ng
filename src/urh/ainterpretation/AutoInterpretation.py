@@ -129,9 +129,11 @@ def merge_message_segments_for_ook(segments: list):
     # Merge Pulse Lengths between long pauses
     for i in range(0, len(large_pause_indices) + 1):
         if i == 0:
-            start, end = 0, large_pause_indices[i] + 1 if len(
-                large_pause_indices
-            ) >= 1 else len(segments)
+            start, end = 0, (
+                large_pause_indices[i] + 1
+                if len(large_pause_indices) >= 1
+                else len(segments)
+            )
         elif i == len(large_pause_indices):
             start, end = large_pause_indices[i - 1] + 1, len(segments)
         else:

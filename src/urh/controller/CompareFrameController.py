@@ -1401,8 +1401,10 @@ class CompareFrameController(QWidget):
             QMessageBox.information(
                 self,
                 self.tr("No messages"),
-                self.tr("There are no protocol messages to analyze. "
-                        "Please demodulate a signal first."),
+                self.tr(
+                    "There are no protocol messages to analyze. "
+                    "Please demodulate a signal first."
+                ),
             )
             return
 
@@ -1422,11 +1424,13 @@ class CompareFrameController(QWidget):
             QMessageBox.information(
                 self,
                 self.tr("No matches found"),
-                self.tr("Could not identify the protocol from the rtl_433 database.\n\n"
-                        "The signal may use a protocol not in the database, "
-                        "or the message structure may not match known patterns.\n\n"
-                        "You can still use the standard 'Analyze protocol' button "
-                        "to detect fields automatically."),
+                self.tr(
+                    "Could not identify the protocol from the rtl_433 database.\n\n"
+                    "The signal may use a protocol not in the database, "
+                    "or the message structure may not match known patterns.\n\n"
+                    "You can still use the standard 'Analyze protocol' button "
+                    "to detect fields automatically."
+                ),
             )
             return
 
@@ -1494,9 +1498,11 @@ class CompareFrameController(QWidget):
 
         details = "\n".join(applied_parts)
         if match.leading_zeros_count > 0:
-            details += f"\n\nNote: {match.leading_zeros_count} leading zero bits " \
-                       f"detected (noise before preamble). " \
-                       f"A 'Leading noise' label marks this region."
+            details += (
+                f"\n\nNote: {match.leading_zeros_count} leading zero bits "
+                f"detected (noise before preamble). "
+                f"A 'Leading noise' label marks this region."
+            )
 
         QMessageBox.information(
             self,

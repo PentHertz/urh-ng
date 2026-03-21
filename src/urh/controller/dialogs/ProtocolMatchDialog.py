@@ -107,17 +107,11 @@ class ProtocolMatchDialog(QDialog):
             pbar.setTextVisible(True)
             pbar.setFormat(f"{match.percentage}%")
             if match.percentage >= 60:
-                pbar.setStyleSheet(
-                    "QProgressBar::chunk { background-color: #4CAF50; }"
-                )
+                pbar.setStyleSheet("QProgressBar::chunk { background-color: #4CAF50; }")
             elif match.percentage >= 30:
-                pbar.setStyleSheet(
-                    "QProgressBar::chunk { background-color: #FFC107; }"
-                )
+                pbar.setStyleSheet("QProgressBar::chunk { background-color: #FFC107; }")
             else:
-                pbar.setStyleSheet(
-                    "QProgressBar::chunk { background-color: #FF5722; }"
-                )
+                pbar.setStyleSheet("QProgressBar::chunk { background-color: #FF5722; }")
             pbar.setFixedHeight(20)
             conf_layout.addWidget(pbar)
             self.table.setCellWidget(row, 0, conf_widget)

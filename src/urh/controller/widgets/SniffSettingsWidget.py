@@ -47,9 +47,9 @@ class SniffSettingsWidget(QWidget):
             modulation_type=self.ui.combox_sniff_Modulation.currentText(),
             bits_per_symbol=self.ui.spinBoxBitsPerSymbol.value(),
             device=device_name,
-            backend_handler=BackendHandler()
-            if backend_handler is None
-            else backend_handler,
+            backend_handler=(
+                BackendHandler() if backend_handler is None else backend_handler
+            ),
             network_raw_mode=network_raw_mode,
         )
 

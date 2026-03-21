@@ -249,6 +249,7 @@ class VirtualDevice(QObject):
                     )
                 elif name.lower().startswith("harogic"):
                     from urh.dev.native.Harogic import Harogic
+
                     self.__dev = Harogic(
                         center_freq=freq,
                         sample_rate=sample_rate,

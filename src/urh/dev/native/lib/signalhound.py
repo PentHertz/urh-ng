@@ -69,9 +69,7 @@ def get_device_list():
     ret = _lib.bbGetSerialNumberList(serials, ctypes.byref(count))
     if ret != 0:
         return []
-    return [
-        f"SignalHound {serials[i]}" for i in range(count.value)
-    ]
+    return [f"SignalHound {serials[i]}" for i in range(count.value)]
 
 
 def open_device():
@@ -100,9 +98,7 @@ def open_device_by_serial(serial):
     if not _load_lib():
         return -1
     handle = ctypes.c_int(-1)
-    ret = _lib.bbOpenDeviceBySerialNumber(
-        ctypes.byref(handle), ctypes.c_int(serial)
-    )
+    ret = _lib.bbOpenDeviceBySerialNumber(ctypes.byref(handle), ctypes.c_int(serial))
     if ret == 0:
         _handle = handle
         _is_open = True
@@ -142,9 +138,7 @@ def set_sample_rate(sample_rate):
     _decimation = dec
     _sample_rate = base_rate / dec
     bw = _sample_rate * 0.8  # 80% of sample rate
-    return _lib.bbConfigureIQ(
-        _handle, ctypes.c_int(dec), ctypes.c_double(bw)
-    )
+    return _lib.bbConfigureIQ(_handle, ctypes.c_int(dec), ctypes.c_double(bw))
 
 
 def set_ref_level(ref_level_dbm):
@@ -153,9 +147,7 @@ def set_ref_level(ref_level_dbm):
     if not _is_open:
         return -1
     _ref_level = float(ref_level_dbm)
-    ret = _lib.bbConfigureRefLevel(
-        _handle, ctypes.c_double(_ref_level)
-    )
+    ret = _lib.bbConfigureRefLevel(_handle, ctypes.c_double(_ref_level))
     if ret != 0:
         return ret
     return _lib.bbConfigureGainAtten(

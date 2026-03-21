@@ -6,6 +6,7 @@ extracted from the rtl_433 project database. Can also auto-detect
 the best decoder (Manchester, PWM, differential, etc.) and strip
 leading zeros/noise before the preamble.
 """
+
 import array
 import copy
 import re
@@ -26,9 +27,14 @@ from urh.util.Logger import logger
 class ProtocolMatch:
     """Result of matching messages against a known protocol."""
 
-    def __init__(self, protocol_entry: dict, score: float, details: dict,
-                 recommended_decoder: Optional[Encoding] = None,
-                 leading_zeros_count: int = 0):
+    def __init__(
+        self,
+        protocol_entry: dict,
+        score: float,
+        details: dict,
+        recommended_decoder: Optional[Encoding] = None,
+        leading_zeros_count: int = 0,
+    ):
         self.name = protocol_entry.get("name", "Unknown")
         self.entry = protocol_entry
         self.score = score  # 0.0 to 1.0
@@ -64,45 +70,62 @@ class ProtocolMatcher:
     # Names must match URH's default decodings in ProjectManager.py
     MODULATION_DECODERS = {
         "OOK_PULSE_MANCHESTER_ZEROBIT": [
-            "Manchester I", "Manchester II", "Differential Manchester",
+            "Manchester I",
+            "Manchester II",
+            "Differential Manchester",
         ],
         "OOK_PULSE_DMC": [
-            "Differential Manchester", "Manchester I", "Manchester II",
+            "Differential Manchester",
+            "Manchester I",
+            "Manchester II",
         ],
         "OOK_PULSE_PCM": [
-            "Non Return To Zero (NRZ)", "Non Return To Zero + Invert",
+            "Non Return To Zero (NRZ)",
+            "Non Return To Zero + Invert",
         ],
         "OOK_PULSE_NRZS": [
-            "Non Return To Zero (NRZ)", "Differential Manchester",
+            "Non Return To Zero (NRZ)",
+            "Differential Manchester",
         ],
         "FSK_PULSE_MANCHESTER_ZEROBIT": [
-            "Manchester I", "Manchester II", "Differential Manchester",
+            "Manchester I",
+            "Manchester II",
+            "Differential Manchester",
         ],
         "OOK_PULSE_PWM": [
-            "PWM (Short=1, Long=0)", "PWM (Short=0, Long=1)",
+            "PWM (Short=1, Long=0)",
+            "PWM (Short=0, Long=1)",
         ],
         "OOK_PULSE_PPM": [
-            "Non Return To Zero (NRZ)", "Non Return To Zero + Invert",
+            "Non Return To Zero (NRZ)",
+            "Non Return To Zero + Invert",
         ],
         "OOK_PULSE_PIWM_RAW": [
-            "PWM (Short=1, Long=0)", "PWM (Short=0, Long=1)",
+            "PWM (Short=1, Long=0)",
+            "PWM (Short=0, Long=1)",
         ],
         "OOK_PULSE_PIWM_DC": [
-            "PWM (Short=1, Long=0)", "PWM (Short=0, Long=1)",
+            "PWM (Short=1, Long=0)",
+            "PWM (Short=0, Long=1)",
         ],
         "FSK_PULSE_PCM": [
-            "Non Return To Zero (NRZ)", "Non Return To Zero + Invert",
+            "Non Return To Zero (NRZ)",
+            "Non Return To Zero + Invert",
         ],
         "FSK_PULSE_PWM": [
-            "PWM (Short=1, Long=0)", "PWM (Short=0, Long=1)",
+            "PWM (Short=1, Long=0)",
+            "PWM (Short=0, Long=1)",
         ],
         # RZ (Return-to-Zero) is same as PCM/NRZ for decoding purposes
         "OOK_PULSE_RZ": [
-            "Non Return To Zero (NRZ)", "Non Return To Zero + Invert",
+            "Non Return To Zero (NRZ)",
+            "Non Return To Zero + Invert",
         ],
         # Oregon Scientific v1 — special, try PWM and Manchester
         "OOK_PULSE_PWM_OSV1": [
-            "PWM (Short=1, Long=0)", "Manchester I", "Manchester II",
+            "PWM (Short=1, Long=0)",
+            "Manchester I",
+            "Manchester II",
         ],
     }
 
@@ -226,8 +249,7 @@ class ProtocolMatcher:
                 if dec.name not in candidate_names:
                     # Also allow partial name matches
                     if not any(
-                        cn in dec.name or dec.name in cn
-                        for cn in candidate_names
+                        cn in dec.name or dec.name in cn for cn in candidate_names
                     ):
                         continue
 
@@ -313,7 +335,9 @@ class ProtocolMatcher:
                     best_decoder = self._find_best_decoder(proto, features)
 
                 match = ProtocolMatch(
-                    proto, final_score, details,
+                    proto,
+                    final_score,
+                    details,
                     recommended_decoder=best_decoder,
                     leading_zeros_count=features.get("leading_zeros", 0),
                 )
@@ -436,7 +460,7 @@ class ProtocolMatcher:
         strip_counts = []
         for bs in bit_strings:
             # Find first '1' bit
-            first_one = bs.find('1')
+            first_one = bs.find("1")
             if first_one < 0:
                 strip_counts.append(0)
                 continue
@@ -447,7 +471,7 @@ class ProtocolMatcher:
 
             # Check if the pattern at 'start' looks like a preamble (alternating)
             if start > 0 and start < len(bs) - 4:
-                chunk = bs[start:start + 8]
+                chunk = bs[start : start + 8]
                 if _is_alternating(chunk):
                     strip_counts.append(start)
                 else:
@@ -511,7 +535,7 @@ class ProtocolMatcher:
 
         preamble_len = len(preamble)
         post_preamble = [
-            bs[preamble_len: preamble_len + 32]
+            bs[preamble_len : preamble_len + 32]
             for bs in bit_strings
             if len(bs) > preamble_len + 8
         ]
@@ -577,8 +601,7 @@ class ProtocolMatcher:
                 len_score = max(0, 1.0 - len_diff / tolerance)
                 score += weight * len_score
                 details["length"] = (
-                    f"{which} vs proto={proto_len}"
-                    f" ({int(len_score * 100)}%)"
+                    f"{which} vs proto={proto_len}" f" ({int(len_score * 100)}%)"
                 )
             else:
                 details["length"] = f"{which} vs proto={proto_len} (no match)"
@@ -726,18 +749,18 @@ class ProtocolMatcher:
     #   display_format: 0=Bit, 1=Hex, 2=ASCII, 3=Decimal, 4=BCD
     KNOWN_LAYOUTS = {
         "HCS200": [
-            ("encrypted", 32, 1, "big", 1),   # Hex
-            ("id", 28, 1, "big", 1),           # Hex
-            ("button", 4, 1, "big", 3),        # Decimal
-            ("battery_ok", 1, 0, "big", 0),    # Bit
-            ("repeat", 1, 0, "big", 0),        # Bit
+            ("encrypted", 32, 1, "big", 1),  # Hex
+            ("id", 28, 1, "big", 1),  # Hex
+            ("button", 4, 1, "big", 3),  # Decimal
+            ("battery_ok", 1, 0, "big", 0),  # Bit
+            ("repeat", 1, 0, "big", 0),  # Bit
         ],
         "HCS300": [
-            ("encrypted", 32, 1, "big", 1),   # Hex
-            ("id", 28, 1, "big", 1),           # Hex
-            ("button", 4, 1, "big", 3),        # Decimal
-            ("battery_ok", 1, 0, "big", 0),    # Bit
-            ("repeat", 1, 0, "big", 0),        # Bit
+            ("encrypted", 32, 1, "big", 1),  # Hex
+            ("id", 28, 1, "big", 1),  # Hex
+            ("button", 4, 1, "big", 3),  # Decimal
+            ("battery_ok", 1, 0, "big", 0),  # Bit
+            ("repeat", 1, 0, "big", 0),  # Bit
         ],
     }
 
@@ -786,15 +809,30 @@ class ProtocolMatcher:
         }
 
         field_sizes = {
-            "id": 8, "channel": 4, "battery_ok": 1, "battery": 1,
-            "temperature_C": 12, "temperature_F": 12,
-            "humidity": 8, "pressure_hPa": 16,
-            "wind_avg_km_h": 8, "wind_max_km_h": 8, "wind_dir_deg": 9,
+            "id": 8,
+            "channel": 4,
+            "battery_ok": 1,
+            "battery": 1,
+            "temperature_C": 12,
+            "temperature_F": 12,
+            "humidity": 8,
+            "pressure_hPa": 16,
+            "wind_avg_km_h": 8,
+            "wind_max_km_h": 8,
+            "wind_dir_deg": 9,
             "rain_mm": 16,
-            "mic": 8, "checksum": 8, "crc": 8,
-            "status": 4, "subtype": 4,
-            "button": 4, "code": 8, "cmd": 4, "data": 8,
-            "encrypted": 32, "learn": 1, "repeat": 1,
+            "mic": 8,
+            "checksum": 8,
+            "crc": 8,
+            "status": 4,
+            "subtype": 4,
+            "button": 4,
+            "code": 8,
+            "cmd": 4,
+            "data": 8,
+            "encrypted": 32,
+            "learn": 1,
+            "repeat": 1,
         }
 
         # Work on RAW plain bits to find structure boundaries.
@@ -810,7 +848,7 @@ class ProtocolMatcher:
 
         # Skip leading zeros
         i = 0
-        while i < len(sample_bits) and sample_bits[i] == '0':
+        while i < len(sample_bits) and sample_bits[i] == "0":
             i += 1
         leading_zeros = i
 
@@ -835,7 +873,7 @@ class ProtocolMatcher:
         gap_end = gap_start
 
         # Skip zeros
-        while gap_end < len(sample_bits) and sample_bits[gap_end] == '0':
+        while gap_end < len(sample_bits) and sample_bits[gap_end] == "0":
             gap_end += 1
 
         # Skip past any framing/guard bits before clean PWM data.
@@ -845,16 +883,16 @@ class ProtocolMatcher:
             scan = gap_end
             while scan < len(sample_bits):
                 # Find next HIGH run
-                if sample_bits[scan] != '1':
+                if sample_bits[scan] != "1":
                     scan += 1
                     continue
                 # Measure HIGH run
                 hi_end = scan
-                while hi_end < len(sample_bits) and sample_bits[hi_end] == '1':
+                while hi_end < len(sample_bits) and sample_bits[hi_end] == "1":
                     hi_end += 1
                 # Measure following LOW run
                 lo_end = hi_end
-                while lo_end < len(sample_bits) and sample_bits[lo_end] == '0':
+                while lo_end < len(sample_bits) and sample_bits[lo_end] == "0":
                     lo_end += 1
                 lo_len = lo_end - hi_end
                 if lo_len > 2:
@@ -882,7 +920,8 @@ class ProtocolMatcher:
         if leading_zeros > 0:
             lbl = ProtocolLabel(
                 name="Leading noise",
-                start=0, end=leading_zeros - 1,
+                start=0,
+                end=leading_zeros - 1,
                 color_index=8,
                 field_type=FieldType("noise", FieldType.Function.CUSTOM),
                 auto_created=True,
@@ -895,7 +934,8 @@ class ProtocolMatcher:
         if preamble_len >= 4:
             lbl = ProtocolLabel(
                 name="Preamble",
-                start=preamble_start, end=preamble_start + preamble_len - 1,
+                start=preamble_start,
+                end=preamble_start + preamble_len - 1,
                 color_index=0,
                 field_type=FieldType("preamble", FieldType.Function.PREAMBLE),
                 auto_created=True,
@@ -909,7 +949,8 @@ class ProtocolMatcher:
         if gap_len > 0:
             lbl = ProtocolLabel(
                 name="Sync/Gap",
-                start=gap_start, end=gap_end - 1,
+                start=gap_start,
+                end=gap_end - 1,
                 color_index=1,
                 field_type=FieldType("sync", FieldType.Function.SYNC),
                 auto_created=True,
@@ -982,9 +1023,7 @@ class ProtocolMatcher:
                     field_type=ft,
                     auto_created=True,
                 )
-                lbl.display_format_index = _auto_display_format(
-                    actual_bits, field_name
-                )
+                lbl.display_format_index = _auto_display_format(actual_bits, field_name)
                 mt.append(lbl)
                 current_bit += actual_bits
                 color_idx += 1
@@ -992,7 +1031,6 @@ class ProtocolMatcher:
         return mt
 
     # ── Utility functions ──────────────────────────────────────
-
 
     @staticmethod
     def _bits_to_hex(bit_string: str) -> str:
@@ -1004,8 +1042,7 @@ class ProtocolMatcher:
             else bit_string
         )
         return "".join(
-            format(int(padded[i: i + 4], 2), "x")
-            for i in range(0, len(padded), 4)
+            format(int(padded[i : i + 4], 2), "x") for i in range(0, len(padded), 4)
         )
 
     @staticmethod
@@ -1022,6 +1059,7 @@ class ProtocolMatcher:
 
 # ── Module-level helpers ──────────────────────────────────────
 
+
 def _auto_display_format(field_bits: int, field_name: str = "") -> int:
     """
     Auto-select display format based on field size and name.
@@ -1034,10 +1072,20 @@ def _auto_display_format(field_bits: int, field_name: str = "") -> int:
         return 0  # Bit
 
     # Boolean/flag fields → Bit regardless of size
-    if any(kw in name for kw in (
-        "battery", "repeat", "learn", "status", "flag",
-        "enable", "active", "parity", "ok",
-    )):
+    if any(
+        kw in name
+        for kw in (
+            "battery",
+            "repeat",
+            "learn",
+            "status",
+            "flag",
+            "enable",
+            "active",
+            "parity",
+            "ok",
+        )
+    ):
         return 0  # Bit
 
     # Small numeric fields → Decimal
@@ -1045,12 +1093,29 @@ def _auto_display_format(field_bits: int, field_name: str = "") -> int:
         return 3  # Decimal
 
     # Sensor values → Decimal (human-readable numbers)
-    if any(kw in name for kw in (
-        "temperature", "humidity", "pressure", "wind", "rain",
-        "lux", "uvi", "speed", "voltage", "power",
-        "channel", "button", "cmd", "sequence", "count",
-        "length", "type", "subtype",
-    )):
+    if any(
+        kw in name
+        for kw in (
+            "temperature",
+            "humidity",
+            "pressure",
+            "wind",
+            "rain",
+            "lux",
+            "uvi",
+            "speed",
+            "voltage",
+            "power",
+            "channel",
+            "button",
+            "cmd",
+            "sequence",
+            "count",
+            "length",
+            "type",
+            "subtype",
+        )
+    ):
         return 3  # Decimal
 
     # Everything else (id, encrypted, code, checksum, data) → Hex
@@ -1094,7 +1159,7 @@ def _find_data_start(bits: str) -> int:
 
     # Skip leading zeros
     i = 0
-    while i < len(bits) and bits[i] == '0':
+    while i < len(bits) and bits[i] == "0":
         i += 1
 
     if i >= len(bits):
@@ -1125,7 +1190,7 @@ def _find_data_start(bits: str) -> int:
     # else: no preamble found, i stays at first non-zero
 
     # Skip zero gap after preamble
-    while i < len(bits) and bits[i] == '0':
+    while i < len(bits) and bits[i] == "0":
         i += 1
 
     return i
@@ -1139,7 +1204,7 @@ def _find_data_end(bits: str) -> int:
         return 0
     i = len(bits) - 1
     trailing_zeros = 0
-    while i >= 0 and bits[i] == '0':
+    while i >= 0 and bits[i] == "0":
         trailing_zeros += 1
         i -= 1
     if trailing_zeros > 4:
@@ -1161,7 +1226,7 @@ def _find_pwm_data_start(bits: str) -> int:
 
     # Skip leading zeros
     i = 0
-    while i < len(bits) and bits[i] == '0':
+    while i < len(bits) and bits[i] == "0":
         i += 1
 
     # Skip alternating preamble (round to even — preamble is always pairs)
@@ -1176,21 +1241,21 @@ def _find_pwm_data_start(bits: str) -> int:
         i += preamble_len
 
     # Skip zero gap
-    while i < len(bits) and bits[i] == '0':
+    while i < len(bits) and bits[i] == "0":
         i += 1
 
     # Build pulse pairs from here and find the most common period
     pairs = []
     scan = i
     while scan < len(bits):
-        if bits[scan] != '1':
+        if bits[scan] != "1":
             scan += 1
             continue
         hi_end = scan
-        while hi_end < len(bits) and bits[hi_end] == '1':
+        while hi_end < len(bits) and bits[hi_end] == "1":
             hi_end += 1
         lo_end = hi_end
-        while lo_end < len(bits) and bits[lo_end] == '0':
+        while lo_end < len(bits) and bits[lo_end] == "0":
             lo_end += 1
         hi_len = hi_end - scan
         lo_len = lo_end - hi_end
@@ -1203,14 +1268,17 @@ def _find_pwm_data_start(bits: str) -> int:
 
     # Find the most common period (= the correct PWM bit period)
     from collections import Counter
+
     period_counts = Counter(p for _, _, _, p in pairs)
     dominant_period = period_counts.most_common(1)[0][0]
 
     # Skip pairs until we find 3 consecutive ones with the dominant period
     for j in range(len(pairs) - 2):
-        if (pairs[j][3] == dominant_period and
-                pairs[j + 1][3] == dominant_period and
-                pairs[j + 2][3] == dominant_period):
+        if (
+            pairs[j][3] == dominant_period
+            and pairs[j + 1][3] == dominant_period
+            and pairs[j + 2][3] == dominant_period
+        ):
             return pairs[j][0]
 
     # Fallback: return first pair position
@@ -1232,7 +1300,7 @@ def _extract_first_packet(bits: str) -> str:
 
     # Find first preamble
     i = 0
-    while i < len(bits) and bits[i] == '0':
+    while i < len(bits) and bits[i] == "0":
         i += 1
 
     # Skip past the first preamble
@@ -1251,9 +1319,9 @@ def _extract_first_packet(bits: str) -> str:
     # Look for a second preamble: alternating bits after a gap
     j = search_from
     while j < len(bits) - 10:
-        if bits[j] == '0':
+        if bits[j] == "0":
             zero_start = j
-            while j < len(bits) and bits[j] == '0':
+            while j < len(bits) and bits[j] == "0":
                 j += 1
             zero_len = j - zero_start
 

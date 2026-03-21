@@ -271,9 +271,9 @@ class MessageType(list):
                 "name": self.name,
                 "id": self.id,
                 "assigned_by_ruleset": "1" if self.assigned_by_ruleset else "0",
-                "assigned_by_logic_analyzer": "1"
-                if self.assigned_by_logic_analyzer
-                else "0",
+                "assigned_by_logic_analyzer": (
+                    "1" if self.assigned_by_logic_analyzer else "0"
+                ),
             },
         )
         for lbl in self:

@@ -36,10 +36,7 @@ DEVICES = {
                     return 0;}
                     """,
     },
-    "harogic": {
-        "lib": "htraapi",
-        "test_function": "Device_Open"
-    },
+    "harogic": {"lib": "htraapi", "test_function": "Device_Open"},
     "hackrf": {
         "lib": "hackrf",
         "test_function": "hackrf_init",

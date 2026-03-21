@@ -101,9 +101,11 @@ class TableModel(QAbstractTableModel):
             self.display_data[row] = (
                 msg.plain_bits
                 if self.proto_view == 0
-                else msg.plain_hex_array
-                if self.proto_view == 1
-                else msg.plain_ascii_array
+                else (
+                    msg.plain_hex_array
+                    if self.proto_view == 1
+                    else msg.plain_ascii_array
+                )
             )
         except IndexError:
             return False

@@ -77,9 +77,11 @@ class Rule(object):
         data = (
             message.decoded_bits_str
             if self.value_type == 0
-            else message.decoded_hex_str
-            if self.value_type == 1
-            else message.decoded_ascii_str
+            else (
+                message.decoded_hex_str
+                if self.value_type == 1
+                else message.decoded_ascii_str
+            )
         )
         return OPERATIONS[self.operator](data[self.start : self.end], self.target_value)
 

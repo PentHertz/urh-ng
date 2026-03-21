@@ -308,7 +308,7 @@ class DeviceSettingsWidget(QWidget):
         # Strip trailing zeros but keep at least one digit after dot
         if "." in s:
             suffix = s[-1] if s[-1] in "GMK" else ""
-            num = s[: -1] if suffix else s
+            num = s[:-1] if suffix else s
             num = num.rstrip("0").rstrip(".")
             s = num + suffix
         return s
