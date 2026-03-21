@@ -195,8 +195,6 @@ class TestUtil(QtTestCase):
                 )
                 logger.info(f"{optional}: available")
             except ImportError:
-                logger.info(
-                    f"{optional}: not compiled on this platform"
-                )
+                logger.info(f"{optional}: not compiled on this platform")
 
         self.assertTrue(True)

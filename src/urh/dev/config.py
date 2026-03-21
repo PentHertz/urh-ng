@@ -152,11 +152,13 @@ DEVICE_CONFIG["SDRPlay"] = {
 DEVICE_CONFIG["HydraSDR"] = {
     "center_freq": dev_range(start=24, stop=1800 * M, step=1),
     # Virtual rates: HW rates (10M, 5M, 2.5M) / decimation (1,2,4,8,16,32,64)
-    "sample_rate": sorted(set(
-        int(hw / d)
-        for hw in [10 * M, 5 * M, 2500 * K]
-        for d in [1, 2, 4, 8, 16, 32, 64]
-    )),
+    "sample_rate": sorted(
+        set(
+            int(hw / d)
+            for hw in [10 * M, 5 * M, 2500 * K]
+            for d in [1, 2, 4, 8, 16, 32, 64]
+        )
+    ),
     "bandwidth": [10 * M, 10 * M],
     "rx_rf_gain": list(range(0, 16)),
     "rx_if_gain": list(range(0, 16)),
@@ -170,10 +172,10 @@ DEVICE_CONFIG["Harogic"] = {
     "sample_rate": [
         125e6 / (1 << i) for i in range(17)
     ],  # Decimation 1 to 2^16 (API max)
-    "bandwidth": [100 * M, 100*M], # Not adjustable in IQS mode
-    "rx_rf_gain": list(range(-100, 8)), # Maps to Ref Level
-    "rx_if_gain": [0, 1], # Maps to IF AGC Off/On
-    "rx_baseband_gain": [0, 1], # Maps to Preamp ForcedOff/AutoOn
+    "bandwidth": [100 * M, 100 * M],  # Not adjustable in IQS mode
+    "rx_rf_gain": list(range(-100, 8)),  # Maps to Ref Level
+    "rx_if_gain": [0, 1],  # Maps to IF AGC Off/On
+    "rx_baseband_gain": [0, 1],  # Maps to Preamp ForcedOff/AutoOn
     "rx_antenna": [
         "Complex 8-bit (uint8)",
         "Complex 16-bit (int16)",

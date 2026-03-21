@@ -19,7 +19,7 @@ from urh.util.Logger import logger
 util.set_shared_library_path()
 
 
-class Devicewp(object): # Device with parameter
+class Devicewp(object):  # Device with parameter
     JOIN_TIMEOUT = 1.0
 
     SYNC_TX_CHUNK_SIZE = 0
@@ -130,7 +130,9 @@ class Devicewp(object): # Device with parameter
         raise NotImplementedError("Overwrite this method in subclass!")
 
     @classmethod
-    def prepare_sync_receive(cls, ctrl_connection: Connection, dev_parameters: OrderedDict):
+    def prepare_sync_receive(
+        cls, ctrl_connection: Connection, dev_parameters: OrderedDict
+    ):
         raise NotImplementedError("Overwrite this method in subclass!")
 
     @classmethod
