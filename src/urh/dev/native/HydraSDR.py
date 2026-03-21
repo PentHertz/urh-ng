@@ -1,5 +1,6 @@
 import numpy as np
 import time
+from collections import OrderedDict
 
 from urh.dev.native.Device import Device
 from urh.dev.native.lib import hydrasdr
@@ -20,10 +21,34 @@ class HydraSDR(Device):
 
     DATA_TYPE = np.float32
 
+    @property
+    def has_multi_device_support(self):
+        return True
+
+    @classmethod
+    def get_device_list(cls):
+        return hydrasdr.get_device_list()
+
     @classmethod
     def setup_device(cls, ctrl_connection: Connection, device_identifier):
-        ret = hydrasdr.open()
+        if device_identifier:
+            # Parse serial from "HydraSDR XXXXXXXXYYYYYYYY" format
+            try:
+                hex_str = device_identifier.replace("HydraSDR ", "").strip()
+                serial = int(hex_str, 16)
+                ret = hydrasdr.open_by_serial(serial)
+            except (ValueError, TypeError):
+                logger.warning(
+                    f"HydraSDR: Could not parse '{device_identifier}', opening first device"
+                )
+                ret = hydrasdr.open()
+        else:
+            ret = hydrasdr.open()
         ctrl_connection.send("OPEN:" + str(ret))
+        if ret == 0:
+            # Set sample type early so the library builds the correct virtual rate table
+            # before set_samplerate is called during init_device
+            hydrasdr.set_sample_type_iq()
         return ret == 0
 
     @classmethod
@@ -67,6 +92,19 @@ class HydraSDR(Device):
         self.success = 0
 
         self.bandwidth_is_adjustable = False
+
+    @property
+    def device_parameters(self) -> OrderedDict:
+        return OrderedDict(
+            [
+                (self.Command.SET_FREQUENCY.name, self.frequency),
+                (self.Command.SET_SAMPLE_RATE.name, self.sample_rate),
+                (self.Command.SET_RF_GAIN.name, self.gain),
+                (self.Command.SET_IF_GAIN.name, self.if_gain),
+                (self.Command.SET_BB_GAIN.name, self.baseband_gain),
+                ("identifier", self.device_serial),
+            ]
+        )
 
     @staticmethod
     def bytes_to_iq(buffer) -> np.ndarray:

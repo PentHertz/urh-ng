@@ -183,6 +183,15 @@ class Encoding(object):
                     self.chain.append(names[i])
                 else:
                     self.chain.append("1;3;1")
+            elif settings.DECODING_PWM in names[i]:
+                self.chain.append(self.code_pwm)
+                i += 1
+                if i < len(names):
+                    self.chain.append(names[i])
+                else:
+                    self.chain.append("1;0")  # default: short=1, long=0
+            elif settings.DECODING_MILLER in names[i]:
+                self.chain.append(self.code_miller)
             i += 1
 
     def get_chain(self):
@@ -228,6 +237,12 @@ class Encoding(object):
                 chainstr.append(settings.DECODING_MORSE)
                 i += 1
                 chainstr.append(self.chain[i])
+            elif self.code_pwm == self.chain[i]:
+                chainstr.append(settings.DECODING_PWM)
+                i += 1
+                chainstr.append(self.chain[i])
+            elif self.code_miller == self.chain[i]:
+                chainstr.append(settings.DECODING_MILLER)
             i += 1
 
         return chainstr
@@ -728,6 +743,116 @@ class Encoding(object):
                     output.extend([True] * self.morse_low)
                 i += 1
             output.extend([False] * self.morse_wait)
+
+        return output, errors, self.ErrorState.SUCCESS
+
+    def code_pwm(self, decoding, inpt):
+        """
+        Pulse Width Modulation decoder/encoder.
+
+        Simple substitution:
+        - 100 -> 1 (short pulse)
+        - 110 -> 0 (long pulse)
+
+        Preamble (alternating 10s) and sync/gap (zeros) pass through
+        unchanged since they don't match 100 or 110 patterns.
+
+        Parameter string "short_val;long_val":
+        - "1;0" (default): 100=1, 110=0
+        - "0;1" (inverted): 100=0, 110=1
+        """
+        errors = 0
+        output = array.array("B", [])
+
+        # Parse parameters
+        try:
+            parts = self.chain[self.chain.index(self.code_pwm) + 1].split(";")
+            short_val = int(parts[0])
+            long_val = int(parts[1])
+        except (ValueError, IndexError, AttributeError):
+            short_val = 1
+            long_val = 0
+
+        if decoding:
+            i = 0
+            while i < len(inpt):
+                if i + 2 < len(inpt):
+                    p0, p1, p2 = inpt[i], inpt[i + 1], inpt[i + 2]
+                    if p0 and not p1 and not p2:
+                        # 100 = short pulse
+                        output.append(True if short_val else False)
+                        i += 3
+                        continue
+                    elif p0 and p1 and not p2:
+                        # 110 = long pulse
+                        output.append(True if long_val else False)
+                        i += 3
+                        continue
+                # No match — pass through the bit as-is
+                # (preamble 10, gap 0, trailing 0, etc.)
+                output.append(inpt[i])
+                i += 1
+        else:
+            # Encode: substitute 1 -> 100, 0 -> 110
+            for bit in inpt:
+                if (bit and short_val) or (not bit and long_val):
+                    output.extend([True, False, False])
+                else:
+                    output.extend([True, True, False])
+
+        return output, errors, self.ErrorState.SUCCESS
+
+    def code_miller(self, decoding, inpt):
+        """
+        Miller encoding (Modified Miller / Delay Modulation).
+
+        Used in RFID (ISO 14443 Type A, EPC Gen2 UHF RFID).
+
+        Each data bit occupies 2 raw bit periods:
+        - Bit 1: transition in the middle of the bit period
+          (raw: 10 or 01 depending on current level)
+        - Bit 0: no transition in the middle
+          (raw: 00 or 11 — same level throughout)
+          If followed by another 0, there is a transition at the boundary.
+
+        Decoding: read 2 raw bits at a time.
+        If the two bits differ -> data bit 1
+        If the two bits are the same -> data bit 0
+        """
+        errors = 0
+        output = array.array("B", [])
+
+        if decoding:
+            # Decode: each pair of raw bits -> one data bit
+            i = 0
+            while i + 1 < len(inpt):
+                if inpt[i] != inpt[i + 1]:
+                    # Transition in middle -> bit 1
+                    output.append(True)
+                else:
+                    # No transition -> bit 0
+                    output.append(False)
+                i += 2
+            # Handle odd trailing bit
+            if i < len(inpt):
+                output.append(inpt[i])
+                errors += 1
+        else:
+            # Encode: data bits -> Miller encoded pairs
+            level = True  # start high
+            for j in range(len(inpt)):
+                if inpt[j]:
+                    # Bit 1: transition in middle
+                    output.append(level)
+                    level = not level
+                    output.append(level)
+                else:
+                    # Bit 0: no mid-transition, stay same level
+                    output.append(level)
+                    output.append(level)
+                    # If next bit is also 0, transition at boundary
+                    if j + 1 < len(inpt) and not inpt[j + 1]:
+                        level = not level
 
         return output, errors, self.ErrorState.SUCCESS
 

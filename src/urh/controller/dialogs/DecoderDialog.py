@@ -66,6 +66,8 @@ class DecoderDialog(QDialog):
         # Function lists
         self.ui.basefunctions.addItem(settings.DECODING_EDGE)
         self.ui.basefunctions.addItem(settings.DECODING_MORSE)
+        self.ui.basefunctions.addItem(settings.DECODING_PWM)
+        self.ui.basefunctions.addItem(settings.DECODING_MILLER)
         self.ui.basefunctions.addItem(settings.DECODING_SUBSTITUTION)
         self.ui.basefunctions.addItem(settings.DECODING_EXTERNAL)
         self.ui.additionalfunctions.addItem(settings.DECODING_INVERT)
@@ -264,6 +266,8 @@ class DecoderDialog(QDialog):
                 settings.DECODING_EXTERNAL,
                 settings.DECODING_CUT,
                 settings.DECODING_MORSE,
+                settings.DECODING_PWM,
+                settings.DECODING_MILLER,
                 settings.DECODING_DISABLED_PREFIX,
             ]:
                 self.ui.decoderchain.addItem(i)
@@ -282,6 +286,7 @@ class DecoderDialog(QDialog):
                         settings.DECODING_DATAWHITENING,
                         settings.DECODING_CUT,
                         settings.DECODING_MORSE,
+                        settings.DECODING_PWM,
                     ]
                 ):
                     self.chainoptions[last_i] = i

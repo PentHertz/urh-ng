@@ -24,6 +24,7 @@ for sdr in (
     "PlutoSDR",
     "SDRPlay",
     "HydraSDR",
+    "Harogic",
     "USRP",
 ):
     try:

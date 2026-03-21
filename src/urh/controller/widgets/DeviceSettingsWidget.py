@@ -94,6 +94,16 @@ class DeviceSettingsWidget(QWidget):
 
         set_val(self.ui.spinBoxFreq, "frequency", config.DEFAULT_FREQUENCY)
         set_val(self.ui.spinBoxSampleRate, "sample_rate", config.DEFAULT_SAMPLE_RATE)
+        # Also sync combobox if it's the active sample rate widget
+        if self.ui.comboBoxSampleRate.isVisible():
+            try:
+                sr = conf_dict.get("sample_rate", config.DEFAULT_SAMPLE_RATE)
+                for i in range(self.ui.comboBoxSampleRate.count()):
+                    if self.ui.comboBoxSampleRate.itemData(i) == sr:
+                        self.ui.comboBoxSampleRate.setCurrentIndex(i)
+                        break
+            except (KeyError, TypeError):
+                pass
         set_val(self.ui.spinBoxBandwidth, "bandwidth", config.DEFAULT_BANDWIDTH)
         set_val(self.ui.spinBoxGain, self.rx_tx_prefix + "gain", config.DEFAULT_GAIN)
         set_val(
@@ -168,6 +178,9 @@ class DeviceSettingsWidget(QWidget):
         )
         self.ui.spinBoxSampleRate.editingFinished.connect(
             self.on_spinbox_sample_rate_editing_finished
+        )
+        self.ui.comboBoxSampleRate.currentIndexChanged.connect(
+            self.on_combobox_sample_rate_current_index_changed
         )
 
         self.ui.spinBoxGain.editingFinished.connect(
@@ -282,6 +295,24 @@ class DeviceSettingsWidget(QWidget):
             self.ui.spinBoxBasebandGain.value()
         )
 
+    @staticmethod
+    def _format_rate(value):
+        if abs(value) >= 1e9:
+            s = "{:.3f}G".format(value / 1e9)
+        elif abs(value) >= 1e6:
+            s = "{:.3f}M".format(value / 1e6)
+        elif abs(value) >= 1e3:
+            s = "{:.3f}K".format(value / 1e3)
+        else:
+            s = "{:.3f}".format(value)
+        # Strip trailing zeros but keep at least one digit after dot
+        if "." in s:
+            suffix = s[-1] if s[-1] in "GMK" else ""
+            num = s[: -1] if suffix else s
+            num = num.rstrip("0").rstrip(".")
+            s = num + suffix
+        return s
+
     def set_device_ui_items_visibility(self, device_name: str, overwrite_settings=True):
         key = device_name if device_name in config.DEVICE_CONFIG.keys() else "Fallback"
         conf = config.DEVICE_CONFIG[key]
@@ -295,24 +326,48 @@ class DeviceSettingsWidget(QWidget):
             spinbox = getattr(self.ui, "spinBox" + ui_item)  # type: QSpinBox
             label = getattr(self.ui, "label" + ui_item)  # type: QLabel
             if key in conf:
-                spinbox.setVisible(True)
                 label.setVisible(True)
 
-                if isinstance(conf[key], list):
-                    spinbox.setMinimum(min(conf[key]))
-                    spinbox.setMaximum(max(conf[key]))
-                    spinbox.setSingleStep(conf[key][1] - conf[key][0])
-                    spinbox.auto_update_step_size = False
-                    if "default_" + key in conf:
-                        spinbox.setValue(conf["default_" + key])
+                # For sample_rate with a list: show combobox instead of spinbox
+                if key == "sample_rate" and isinstance(conf[key], list):
+                    spinbox.setVisible(False)
+                    combo = self.ui.comboBoxSampleRate
+                    combo.blockSignals(True)
+                    combo.clear()
+                    rates = sorted(conf[key], reverse=True)
+                    for rate in rates:
+                        combo.addItem(self._format_rate(rate) + "Sps", rate)
+                    combo.setVisible(True)
+                    combo.blockSignals(False)
+                    # Select default
+                    default_rate = conf.get("default_" + key)
+                    if default_rate is not None:
+                        for i in range(combo.count()):
+                            if combo.itemData(i) == default_rate:
+                                combo.setCurrentIndex(i)
+                                break
                 else:
-                    spinbox.setMinimum(conf[key].start)
-                    spinbox.setMaximum(conf[key].stop)
-                    spinbox.auto_update_step_size = True
-                    spinbox.adjust_step()
+                    spinbox.setVisible(True)
+                    if key == "sample_rate":
+                        self.ui.comboBoxSampleRate.setVisible(False)
+
+                    if isinstance(conf[key], list):
+                        spinbox.setMinimum(min(conf[key]))
+                        spinbox.setMaximum(max(conf[key]))
+                        spinbox.setSingleStep(conf[key][1] - conf[key][0])
+                        spinbox.auto_update_step_size = False
+                        if "default_" + key in conf:
+                            spinbox.setValue(conf["default_" + key])
+                    else:
+                        spinbox.setMinimum(conf[key].start)
+                        spinbox.setMaximum(conf[key].stop)
+                        spinbox.auto_update_step_size = True
+                        spinbox.adjust_step()
             else:
                 spinbox.setVisible(False)
                 label.setVisible(False)
+                if key == "sample_rate":
+                    self.ui.comboBoxSampleRate.setVisible(False)
 
         self.ui.btnLockBWSR.setVisible("sample_rate" in conf and "bandwidth" in conf)
 
@@ -463,7 +518,12 @@ class DeviceSettingsWidget(QWidget):
         self.ui.spinBoxIFGain.editingFinished.emit()
         self.ui.spinBoxBasebandGain.editingFinished.emit()
         self.ui.spinBoxNRepeat.editingFinished.emit()
-        self.ui.spinBoxSampleRate.editingFinished.emit()
+        if self.ui.comboBoxSampleRate.isVisible():
+            self.ui.comboBoxSampleRate.currentIndexChanged.emit(
+                self.ui.comboBoxSampleRate.currentIndex()
+            )
+        else:
+            self.ui.spinBoxSampleRate.editingFinished.emit()
         self.ui.spinBoxFreqCorrection.editingFinished.emit()
         self.ui.lineEditIP.editingFinished.emit()
         self.ui.lineEditSubdevice.editingFinished.emit()
@@ -523,6 +583,17 @@ class DeviceSettingsWidget(QWidget):
         if self.bw_sr_are_locked:
             self.ui.spinBoxBandwidth.setValue(self.ui.spinBoxSampleRate.value())
             self.device.bandwidth = self.ui.spinBoxBandwidth.value()
+
+    @pyqtSlot(int)
+    def on_combobox_sample_rate_current_index_changed(self, index: int):
+        if index < 0:
+            return
+        rate = self.ui.comboBoxSampleRate.itemData(index)
+        if rate is not None and self.device is not None:
+            self.device.sample_rate = rate
+            if self.bw_sr_are_locked:
+                self.ui.spinBoxBandwidth.setValue(rate)
+                self.device.bandwidth = rate
 
     @pyqtSlot()
     def on_spinbox_frequency_editing_finished(self):

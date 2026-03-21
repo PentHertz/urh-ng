@@ -68,7 +68,7 @@ cpdef int configure_and_start_rx(double freq, double sample_rate, double gain, i
     
     _profile.CenterFreq_Hz = freq
     _profile.RefLevel_dBm = gain
-    _profile.DecimateFactor = <uint32_t>(122.88e6 / sample_rate)
+    _profile.DecimateFactor = <uint32_t>(_profile.NativeIQSampleRate_SPS / sample_rate)
     _profile.BusTimeout_ms = 100
     _profile.TriggerSource = charogic.Bus
     _profile.TriggerMode = charogic.Adaptive
@@ -182,3 +182,6 @@ def get_data_type():
     if _profile.DataFormat == charogic.Complex32bit: return 'int32'
     elif _profile.DataFormat == charogic.Complex8bit: return 'int8'
     else: return 'int16'
+
+cpdef double get_native_sample_rate():
+    return _profile.NativeIQSampleRate_SPS

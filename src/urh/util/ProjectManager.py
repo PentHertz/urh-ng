@@ -127,17 +127,48 @@ class ProjectManager(QObject):
             )
 
         fallback = [
+            # No encoding — raw bits as demodulated (OOK_PCM, FSK_PCM, PPM)
             Encoding(["Non Return To Zero (NRZ)"]),
+            # Inverted raw bits
             Encoding(["Non Return To Zero + Invert", settings.DECODING_INVERT]),
+            # Manchester IEEE 802.3: 01→1, 10→0 (Oregon Scientific, weather sensors)
             Encoding(["Manchester I", settings.DECODING_EDGE]),
+            # Manchester Thomas: 10→1, 01→0 (opposite convention)
             Encoding(
                 ["Manchester II", settings.DECODING_EDGE, settings.DECODING_INVERT]
             ),
+            # Differential Manchester / Biphase Mark (Ford keys, Funkbus)
             Encoding(
                 [
                     "Differential Manchester",
                     settings.DECODING_EDGE,
                     settings.DECODING_DIFFERENTIAL,
+                ]
+            ),
+            # PWM: 100→1 (short pulse), 110→0 (long pulse)
+            # Used by HCS200/300 KeeLoq, Acurite, many OOK remotes/sensors
+            Encoding(
+                [
+                    "PWM (Short=1, Long=0)",
+                    settings.DECODING_PWM,
+                    "1;0",
+                ]
+            ),
+            # PWM inverted: 100→0, 110→1
+            Encoding(
+                [
+                    "PWM (Short=0, Long=1)",
+                    settings.DECODING_PWM,
+                    "0;1",
+                ]
+            ),
+            # Miller / Modified Miller / Delay Modulation
+            # Used in RFID (ISO 14443, EPC Gen2 UHF)
+            # Transition mid-bit = 1, no transition = 0
+            Encoding(
+                [
+                    "Miller",
+                    settings.DECODING_MILLER,
                 ]
             ),
         ]

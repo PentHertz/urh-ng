@@ -29,6 +29,7 @@ from urh import settings
 from urh.awre import AutoAssigner
 from urh.controller.dialogs.MessageTypeDialog import MessageTypeDialog
 from urh.controller.dialogs.ProtocolLabelDialog import ProtocolLabelDialog
+from urh.controller.dialogs.ProtocolMatchDialog import ProtocolMatchDialog
 from urh.models.LabelValueTableModel import LabelValueTableModel
 from urh.models.MessageTypeTableModel import MessageTypeTableModel
 from urh.models.ParticipantListModel import ParticipantListModel
@@ -122,6 +123,13 @@ class CompareFrameController(QWidget):
         )
         self.assign_participant_address_action.setCheckable(True)
         self.assign_participant_address_action.setChecked(True)
+        self.analyze_menu.addSeparator()
+        self.auto_identify_protocol_action = self.analyze_menu.addAction(
+            self.tr("Auto-identify protocol (rtl_433 DB)")
+        )
+        self.auto_identify_protocol_action.triggered.connect(
+            self.on_auto_identify_protocol_triggered
+        )
         self.ui.btnAnalyze.setMenu(self.analyze_menu)
 
         self.ui.lblShownRows.hide()
@@ -1382,6 +1390,128 @@ class CompareFrameController(QWidget):
         self.ui.stackedWidgetLogicAnalysis.setCurrentIndex(0)
 
         self.message_type_table_model.update()  # in case message types were added by logic analyzer
+
+    @pyqtSlot()
+    def on_auto_identify_protocol_triggered(self):
+        """Auto-identify protocol by matching messages against the rtl_433 database."""
+        from urh.awre.ProtocolMatcher import ProtocolMatcher
+
+        messages = self.proto_analyzer.messages
+        if not messages:
+            QMessageBox.information(
+                self,
+                self.tr("No messages"),
+                self.tr("There are no protocol messages to analyze. "
+                        "Please demodulate a signal first."),
+            )
+            return
+
+        self.setCursor(Qt.CursorShape.WaitCursor)
+
+        try:
+            matcher = ProtocolMatcher(messages, self.decodings)
+            matches = matcher.find_matches(max_results=30)
+        except Exception as e:
+            self.unsetCursor()
+            Errors.exception(e)
+            return
+
+        self.unsetCursor()
+
+        if not matches:
+            QMessageBox.information(
+                self,
+                self.tr("No matches found"),
+                self.tr("Could not identify the protocol from the rtl_433 database.\n\n"
+                        "The signal may use a protocol not in the database, "
+                        "or the message structure may not match known patterns.\n\n"
+                        "You can still use the standard 'Analyze protocol' button "
+                        "to detect fields automatically."),
+            )
+            return
+
+        dialog = ProtocolMatchDialog(matches, parent=self)
+        dialog.match_selected.connect(self._apply_protocol_match)
+        dialog.exec()
+
+    def _apply_protocol_match(self, match):
+        """Apply a selected protocol match: decoder + message type with labels.
+
+        Order matters:
+        1. Build labels FIRST (on raw plain_bits) — this sets apply_decoding=False
+           on preamble/gap labels so the decoder won't mangle them
+        2. Apply labels to messages (so exclude_from_decoding_labels is populated)
+        3. THEN apply the decoder (it will skip preamble/gap, only decode data)
+        """
+        from urh.awre.ProtocolMatcher import ProtocolMatcher
+
+        applied_parts = []
+
+        # 1. Build labels FIRST (works on plain_bits, before decoder is applied)
+        matcher = ProtocolMatcher(self.proto_analyzer.messages, self.decodings)
+        message_type = matcher.build_labels_from_match(match)
+
+        if message_type is not None:
+            self.proto_analyzer.message_types.append(message_type)
+            for msg in self.proto_analyzer.messages:
+                msg.message_type = message_type
+            applied_parts.append(f"{len(message_type)} field labels created")
+        else:
+            applied_parts.append("No field labels (not enough protocol info)")
+
+        # 2. NOW apply decoder — preamble/gap labels have apply_decoding=False
+        #    so URH's decoded_bits will skip them and only PWM-decode the data
+        if match.recommended_decoder is not None:
+            decoder = match.recommended_decoder
+
+            self.show_all_cols()
+            for msg in self.proto_analyzer.messages:
+                msg.decoder = decoder
+
+            self.ui.tblViewProtocol.zero_hide_offsets.clear()
+            self.clear_search()
+
+            self.ui.cbDecoding.blockSignals(True)
+            idx = next(
+                (i for i, d in enumerate(self.decodings) if d.name == decoder.name),
+                -1,
+            )
+            if idx >= 0:
+                self.ui.cbDecoding.setCurrentIndex(idx)
+            self.ui.cbDecoding.setToolTip(decoder.name)
+            self.ui.cbDecoding.blockSignals(False)
+
+            if self.proto_analyzer.messages:
+                self.__set_decoding_error_label(self.proto_analyzer.messages[0])
+
+            applied_parts.append(f"Decoder: {decoder.name}")
+
+        # 3. Full UI refresh — same steps as set_decoding() + label update
+        self.protocol_model.update()
+        self.label_value_model.update()
+        self.message_type_table_model.update()
+        self.ui.tblViewMessageTypes.clearSelection()
+
+        details = "\n".join(applied_parts)
+        if match.leading_zeros_count > 0:
+            details += f"\n\nNote: {match.leading_zeros_count} leading zero bits " \
+                       f"detected (noise before preamble). " \
+                       f"A 'Leading noise' label marks this region."
+
+        QMessageBox.information(
+            self,
+            self.tr("Protocol applied"),
+            self.tr(
+                "Applied protocol: {name}\n"
+                "Confidence: {pct}%\n\n"
+                "{details}\n\n"
+                "You can adjust the field boundaries in the label view."
+            ).format(
+                name=match.name,
+                pct=match.percentage,
+                details=details,
+            ),
+        )
 
     @pyqtSlot()
     def on_btn_save_protocol_clicked(self):

@@ -1,4 +1,6 @@
 cimport urh.dev.native.lib.chydrasdr as chydrasdr
+from libc.stdlib cimport malloc, free
+from libc.stdint cimport uint32_t, uint64_t
 import time
 from cpython cimport array
 import array
@@ -8,8 +10,6 @@ from urh.util.Logger import logger
 
 
 ctypedef unsigned char uint8_t
-ctypedef unsigned int uint32_t
-ctypedef unsigned long long uint64_t
 
 cdef chydrasdr.hydrasdr_device* _c_device
 cdef object f
@@ -21,6 +21,22 @@ cdef int _c_callback_recv(chydrasdr.hydrasdr_transfer*transfer) noexcept with gi
     except OSError as e:
         logger.warning("Cython-HydraSDR:" + str(e))
     return 0
+
+cpdef list get_device_list():
+    cdef int count = chydrasdr.hydrasdr_list_devices(NULL, 0)
+    if count <= 0:
+        return []
+    cdef uint64_t* serials = <uint64_t*>malloc(count * sizeof(uint64_t))
+    if serials == NULL:
+        return []
+    chydrasdr.hydrasdr_list_devices(serials, count)
+    result = []
+    for i in range(count):
+        result.append("HydraSDR {:08X}{:08X}".format(
+            <uint32_t>(serials[i] >> 32),
+            <uint32_t>(serials[i] & 0xFFFFFFFF)))
+    free(serials)
+    return result
 
 cpdef open_by_serial(uint64_t serial_number):
     return chydrasdr.hydrasdr_open_sn(&_c_device, serial_number)
@@ -47,13 +63,13 @@ cpdef array.array get_sample_rates():
 
 cpdef int set_sample_rate(uint32_t sample_rate):
     """
-    Parameter samplerate can be either the index of a samplerate or directly its value in Hz within the list 
+    Parameter samplerate can be either the index of a samplerate or directly its value in Hz within the list
     """
-    chydrasdr.hydrasdr_set_samplerate(_c_device, sample_rate)
+    return chydrasdr.hydrasdr_set_samplerate(_c_device, sample_rate)
 
-cpdef int set_center_frequency(uint32_t freq_hz):
+cpdef int set_center_frequency(uint64_t freq_hz):
     """
-    Parameter freq_hz shall be between 24000000(24MHz) and 1750000000(1.75GHz)
+    Parameter freq_hz in Hz (uint64_t since API v1.1.0)
     """
     return chydrasdr.hydrasdr_set_freq(_c_device, freq_hz)
 
@@ -74,6 +90,18 @@ cpdef int set_if_rx_gain(uint8_t vga_gain):
     Shall be between 0 and 15
     """
     return chydrasdr.hydrasdr_set_vga_gain(_c_device, vga_gain)
+
+cpdef int set_bandwidth(uint32_t bandwidth):
+    return chydrasdr.hydrasdr_set_bandwidth(_c_device, bandwidth)
+
+cpdef int set_sample_type_iq():
+    return chydrasdr.hydrasdr_set_sample_type(_c_device, chydrasdr.hydrasdr_sample_type.HYDRASDR_SAMPLE_FLOAT32_IQ)
+
+cpdef int set_decimation_mode(int mode):
+    """
+    0 = LOW_BANDWIDTH (default), 1 = HIGH_DEFINITION
+    """
+    return chydrasdr.hydrasdr_set_decimation_mode(_c_device, <chydrasdr.hydrasdr_decimation_mode>mode)
 
 cpdef int start_rx(callback):
     global f

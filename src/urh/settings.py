@@ -99,6 +99,8 @@ DECODING_EXTERNAL = "External Program"
 DECODING_ENOCEAN = "Wireless Short Packet (WSP)"
 DECODING_CUT = "Cut before/after"
 DECODING_MORSE = "Morse Code"
+DECODING_PWM = "Pulse Width Modulation (PWM)"
+DECODING_MILLER = "Miller Encoding"
 DECODING_DISABLED_PREFIX = "[Disabled] "
 
 LABEL_COLORS = [
