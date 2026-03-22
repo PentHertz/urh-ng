@@ -371,7 +371,7 @@ jobs:
           with open('setup.py') as f:
               content = f.read()
           match = re.search(r'version\s*=\s*["\x27]([^"\x27]+)["\x27]', content)
-          print(match.group(1) if match else '2.9.8')
+          print(match.group(1) if match else '3.0.0')
           EOF
           VERSION=$(python3 get_version.py)
           DATE=$(date +%Y%m%d)
