@@ -44,11 +44,11 @@ BIT_SCENE_HEIGHT = 100
 
 TRANSPARENT_COLOR = QColor(Qt.GlobalColor.transparent)
 
-LINECOLOR = QColor.fromRgb(0, 200, 140)         # teal signal trace
-LINECOLOR_I = QColor.fromRgb(0, 180, 255)       # cyan I channel
-LINECOLOR_Q = QColor.fromRgb(255, 140, 0)       # orange Q channel
-BGCOLOR = QColor.fromRgb(18, 18, 24)            # deep dark background
-AXISCOLOR = QColor.fromRgb(60, 65, 75, 120)     # subtle grid
+LINECOLOR = QColor.fromRgb(0, 200, 140)  # teal signal trace
+LINECOLOR_I = QColor.fromRgb(0, 180, 255)  # cyan I channel
+LINECOLOR_Q = QColor.fromRgb(255, 140, 0)  # orange Q channel
+BGCOLOR = QColor.fromRgb(18, 18, 24)  # deep dark background
+AXISCOLOR = QColor.fromRgb(60, 65, 75, 120)  # subtle grid
 ARROWCOLOR = QColor.fromRgb(0, 200, 140)
 
 ERROR_BG_COLOR = QColor.fromRgb(255, 0, 0, 150)

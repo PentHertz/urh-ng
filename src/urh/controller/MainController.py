@@ -774,8 +774,9 @@ class MainController(QMainWindow):
             "&lt;<a href='mailto:andreas.noack@hochschule-stralsund.de'>"
             "andreas.noack@hochschule-stralsund.de</a>&gt;</li>"
             "</ul>"
-            "<b>Data sources:</b> rtl_433, Flipper-ARF, ProtoPirate"
-            .format(version.VERSION)
+            "<b>Data sources:</b> rtl_433, Flipper-ARF, ProtoPirate".format(
+                version.VERSION
+            )
         )
 
         QMessageBox.about(self, self.tr("About URH-NG"), self.tr(descr))

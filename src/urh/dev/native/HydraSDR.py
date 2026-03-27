@@ -111,6 +111,4 @@ class HydraSDR(Device):
 
     @staticmethod
     def bytes_to_iq(buffer) -> np.ndarray:
-        return np.frombuffer(
-            buffer, dtype=np.float32
-        ).reshape((-1, 2), order="C")
+        return np.frombuffer(buffer, dtype=np.float32).reshape((-1, 2), order="C")
