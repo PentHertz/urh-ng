@@ -25,10 +25,10 @@ class SignalHound(Device):
         {
             Device.Command.SET_FREQUENCY.name: "set_center_frequency",
             Device.Command.SET_SAMPLE_RATE.name: "set_sample_rate",
+            Device.Command.SET_BANDWIDTH.name: "set_bandwidth",
             Device.Command.SET_RF_GAIN.name: "set_ref_level",
         }
     )
-    del DEVICE_METHODS[Device.Command.SET_BANDWIDTH.name]
 
     try:
         from urh.dev.native.lib import signalhound
@@ -103,7 +103,7 @@ class SignalHound(Device):
             baseband_gain=baseband_gain,
             resume_on_full_receive_buffer=resume_on_full_receive_buffer,
         )
-        self.bandwidth_is_adjustable = False
+        self.bandwidth_is_adjustable = True
 
     @property
     def device_parameters(self) -> OrderedDict:
@@ -111,6 +111,7 @@ class SignalHound(Device):
             [
                 (self.Command.SET_FREQUENCY.name, self.frequency),
                 (self.Command.SET_SAMPLE_RATE.name, self.sample_rate),
+                (self.Command.SET_BANDWIDTH.name, self.bandwidth),
                 (self.Command.SET_RF_GAIN.name, self.gain),
                 ("identifier", self.device_serial),
             ]

@@ -159,7 +159,8 @@ DEVICE_CONFIG["HydraSDR"] = {
             for d in [1, 2, 4, 8, 16, 32, 64]
         )
     ),
-    # Bandwidth auto-selected by the library based on sample rate
+    # Bandwidth: adjustable, narrower than sample rate = filter
+    "bandwidth": dev_range(start=1 * K, stop=10 * M, step=1),
     "rx_rf_gain": list(range(0, 16)),
     "rx_if_gain": list(range(0, 16)),
     "rx_baseband_gain": list(range(0, 16)),
@@ -191,7 +192,8 @@ DEVICE_CONFIG["SignalHound"] = {
     "center_freq": dev_range(start=9 * K, stop=6400 * M, step=1),
     # 40 MS/s base rate / decimation (powers of 2, 1-8192)
     "sample_rate": [40e6 / (1 << i) for i in range(14)],
-    "bandwidth": [27 * M, 27 * M],
+    # Bandwidth: adjustable filter, narrower = better selectivity
+    "bandwidth": dev_range(start=1 * K, stop=27 * M, step=1),
     "rx_rf_gain": list(range(-100, 21)),  # Reference level in dBm
     "default_sample_rate": 40e6 / 8,
     "default_rx_rf_gain": -30,

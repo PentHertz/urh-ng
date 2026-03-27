@@ -755,15 +755,30 @@ class MainController(QMainWindow):
     @pyqtSlot()
     def on_show_about_clicked(self):
         descr = (
-            "<b><h2>Universal Radio Hacker</h2></b>Version: {0}<br />"
-            "GitHub: <a href='https://github.com/jopohl/urh'>https://github.com/jopohl/urh</a><br /><br />"
-            "Creators:<i><ul><li>"
-            "Johannes Pohl &lt;<a href='mailto:joahnnes.pohl90@gmail.com'>johannes.pohl90@gmail.com</a>&gt;</li>"
-            "<li>Andreas Noack &lt;<a href='mailto:andreas.noack@hochschule-stralsund.de'>andreas.noack@hochschule-stralsund.de</a>&gt;</li>"
-            "</ul></i>".format(version.VERSION)
+            "<b><h2>URH-NG</h2></b>"
+            "<b>Universal Radio Hacker - Next Gen</b><br />"
+            "Version: {0}<br /><br />"
+            "GitHub: <a href='https://github.com/PentHertz/URH'>"
+            "https://github.com/PentHertz/URH</a><br /><br />"
+            "<b>Authors:</b><ul>"
+            "<li><b>S&eacute;bastien Dudek</b> (PentHertz) "
+            "&lt;<a href='https://penthertz.com'>penthertz.com</a>&gt;<br />"
+            "<i>URH-NG fork, auto protocol identification (327 protocols), "
+            "23 crypto decoders, FrameAnalyzer, spectrum analyzer IQ/constellation, "
+            "modulation detection, HydraSDR/Harogic/Signal Hound support</i></li>"
+            "<li>Johannes Pohl "
+            "&lt;<a href='mailto:johannes.pohl90@gmail.com'>"
+            "johannes.pohl90@gmail.com</a>&gt;<br />"
+            "<i>Original URH creator</i></li>"
+            "<li>Andreas Noack "
+            "&lt;<a href='mailto:andreas.noack@hochschule-stralsund.de'>"
+            "andreas.noack@hochschule-stralsund.de</a>&gt;</li>"
+            "</ul>"
+            "<b>Data sources:</b> rtl_433, Flipper-ARF, ProtoPirate"
+            .format(version.VERSION)
         )
 
-        QMessageBox.about(self, self.tr("About"), self.tr(descr))
+        QMessageBox.about(self, self.tr("About URH-NG"), self.tr(descr))
 
     @pyqtSlot(int, int, int, int)
     def show_protocol_selection_in_interpretation(

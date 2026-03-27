@@ -15,9 +15,9 @@ class HydraSDR(Device):
     DEVICE_METHODS.update(
         {
             Device.Command.SET_FREQUENCY.name: "set_center_frequency",
+            Device.Command.SET_BANDWIDTH.name: "set_bandwidth",
         }
     )
-    del DEVICE_METHODS[Device.Command.SET_BANDWIDTH.name]
 
     DATA_TYPE = np.float32
 
@@ -93,7 +93,7 @@ class HydraSDR(Device):
         )
         self.success = 0
 
-        self.bandwidth_is_adjustable = False
+        self.bandwidth_is_adjustable = True
 
     @property
     def device_parameters(self) -> OrderedDict:
@@ -101,6 +101,7 @@ class HydraSDR(Device):
             [
                 (self.Command.SET_FREQUENCY.name, self.frequency),
                 (self.Command.SET_SAMPLE_RATE.name, self.sample_rate),
+                (self.Command.SET_BANDWIDTH.name, self.bandwidth),
                 (self.Command.SET_RF_GAIN.name, self.gain),
                 (self.Command.SET_IF_GAIN.name, self.if_gain),
                 (self.Command.SET_BB_GAIN.name, self.baseband_gain),
@@ -110,4 +111,6 @@ class HydraSDR(Device):
 
     @staticmethod
     def bytes_to_iq(buffer) -> np.ndarray:
-        return np.frombuffer(buffer, dtype=np.float32).reshape((-1, 2), order="C")
+        return np.frombuffer(
+            buffer, dtype=np.float32
+        ).reshape((-1, 2), order="C")

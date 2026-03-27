@@ -15,6 +15,7 @@ class GridScene(ZoomableScene):
         self.center_freq = 433.92e6
         self.frequencies = []
         self.frequency_marker = None
+        self.fft_size = 1
         super().__init__(parent)
         self.setSceneRect(0, 0, 10, 10)
 
@@ -34,8 +35,9 @@ class GridScene(ZoomableScene):
                 Formatter.big_value_with_suffix(self.center_freq) + "   "
             )
             x_grid_size = int(view_rect.width() / parent_width * font_width)
-            # x_grid_size = int(0.1 * view_rect.width()) if 0.1 * view_rect.width() > 1 else 1
+
             y_grid_size = 1
+
             x_mid = np.where(self.frequencies == 0)[0]
             x_mid = int(x_mid[0]) if len(x_mid) > 0 else 0
 
@@ -56,11 +58,12 @@ class GridScene(ZoomableScene):
             x_range = list(range(x_mid, left, -x_grid_size)) + list(
                 range(x_mid, right_border, x_grid_size)
             )
+            y_values = list(np.arange(top, bottom, y_grid_size))
             lines = [
                 QLineF(x, rect.top(), x, bottom - fh * scale_y) for x in x_range
             ] + [
                 QLineF(rect.left(), y, rect.right(), y)
-                for y in np.arange(top, bottom, y_grid_size)
+                for y in y_values
             ]
 
             pen = painter.pen()
@@ -68,22 +71,24 @@ class GridScene(ZoomableScene):
             painter.setPen(pen)
             painter.drawLines(lines)
             painter.scale(scale_x, scale_y)
-            counter = -1  # Counter for Label for every second line
+            counter = -1
 
+            # X axis: frequency labels
             for x in x_range:
                 freq = self.frequencies[x]
                 counter += 1
                 if freq == 0:
                     counter = 0
 
-                if freq != 0 and (counter % 2 != 0):  # Label for every second line
+                if freq != 0 and (counter % 2 != 0):
                     continue
 
                 value = Formatter.big_value_with_suffix(self.center_freq + freq, 2)
-                font_width = self.font_metrics.horizontalAdvance(value)
+                fw = self.font_metrics.horizontalAdvance(value)
                 painter.drawText(
-                    QPointF(x / scale_x - font_width / 2, bottom / scale_y), value
+                    QPointF(x / scale_x - fw / 2, bottom / scale_y), value
                 )
+
 
     def draw_frequency_marker(self, x_pos, frequency):
         if frequency is None:

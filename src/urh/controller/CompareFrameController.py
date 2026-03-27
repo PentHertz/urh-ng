@@ -133,7 +133,9 @@ class CompareFrameController(QWidget):
         self.crypto_toolkit_action = self.analyze_menu.addAction(
             self.tr("Crypto Toolkit (KeeLoq, TEA, AES...)")
         )
-        self.crypto_toolkit_action.triggered.connect(self.on_keeloq_decoder_triggered)
+        self.crypto_toolkit_action.triggered.connect(
+            self.on_keeloq_decoder_triggered
+        )
         self.ui.btnAnalyze.setMenu(self.analyze_menu)
 
         self.ui.lblShownRows.hide()
@@ -1404,10 +1406,39 @@ class CompareFrameController(QWidget):
         serial = 0
         cipher_hint = getattr(self, "_last_cipher_hint", "")
 
+        # For zero-key / known-key protocols: show auto-decode result
+        _AUTOCRACK_CIPHERS = {
+            "Ford-GF2-CRC", "Mitsubishi-XOR", "Somfy-XOR",
+            "Came-Atomo", "Came-Twee", "Mazda-Siemens",
+            "Phoenix-V2", "SecurityPlus", "KIA-V5-Mixer",
+            "KIA-V6-AES", "Porsche-Cayenne", "Subaru-XOR",
+            "PSA-TEA", "VAG", "KIA-V3-V4",
+        }
+        if cipher_hint in _AUTOCRACK_CIPHERS and self.proto_analyzer.messages:
+            # Build a mock match to reuse _auto_decode_crypto
+            class _M:
+                pass
+            mock = _M()
+            mock.cipher = cipher_hint
+            mock.name = cipher_hint
+            info = self._auto_decode_crypto(mock)
+            if info and info.strip():
+                from PyQt6.QtWidgets import QMessageBox
+
+                QMessageBox.information(
+                    self,
+                    self.tr("Protocol Decode"),
+                    self.tr(info.strip()),
+                )
+                return
+
         # Extract encrypted + serial from selected message labels
         if self.proto_analyzer.messages:
             msg = None
-            sel = self.ui.tblViewProtocol.selectionModel().selectedRows()
+            sel = (
+                self.ui.tblViewProtocol.selectionModel()
+                .selectedRows()
+            )
             if sel:
                 row = sel[0].row()
                 if row < len(self.proto_analyzer.messages):
@@ -1415,7 +1446,9 @@ class CompareFrameController(QWidget):
             if msg is None:
                 msg = self.proto_analyzer.messages[0]
 
-            bits = msg.decoded_bits_str or msg.plain_bits_str
+            bits = (
+                msg.decoded_bits_str or msg.plain_bits_str
+            )
             for label in msg.message_type:
                 name = label.name.lower()
                 start = label.start
@@ -1423,9 +1456,16 @@ class CompareFrameController(QWidget):
                 field_bits = bits[start:end]
                 if not field_bits:
                     continue
-                if "encrypted" in name and len(field_bits) >= 32:
-                    encrypted = int(field_bits[:32][::-1], 2)
-                elif "id" in name and len(field_bits) >= 16:
+                if (
+                    "encrypted" in name
+                    and len(field_bits) >= 32
+                ):
+                    encrypted = int(
+                        field_bits[:32][::-1], 2
+                    )
+                elif (
+                    "id" in name and len(field_bits) >= 16
+                ):
                     serial = int(field_bits[::-1], 2)
 
         dialog = KeeLoqDialog(
@@ -1470,11 +1510,16 @@ class CompareFrameController(QWidget):
                 self,
                 self.tr("No matches found"),
                 self.tr(
-                    "Could not identify the protocol from the PHZ database.\n\n"
-                    "The signal may use a protocol not in the database, "
-                    "or the message structure may not match known patterns.\n\n"
-                    "You can still use the standard 'Analyze protocol' button "
-                    "to detect fields automatically."
+                    "Could not identify the protocol "
+                    "from the PHZ database.\n\n"
+                    "Possible causes:\n"
+                    "- Wrong Samples/Symbol in Interpretation tab "
+                    "(try adjusting until the signal looks clean)\n"
+                    "- Wrong modulation type (try ASK, FSK, PSK)\n"
+                    "- Protocol not in the 327-entry database\n"
+                    "- Signal too short or corrupted\n\n"
+                    "You can still use 'Analyze protocol' for "
+                    "generic field detection."
                 ),
             )
             return
@@ -1495,7 +1540,9 @@ class CompareFrameController(QWidget):
         from urh.awre.ProtocolMatcher import ProtocolMatcher
 
         # Store cipher hint so Crypto Toolkit auto-selects it
-        self._last_cipher_hint = getattr(match, "cipher", "")
+        self._last_cipher_hint = getattr(
+            match, "cipher", ""
+        )
 
         applied_parts = []
 
@@ -1552,20 +1599,353 @@ class CompareFrameController(QWidget):
                 f"A 'Leading noise' label marks this region."
             )
 
+        # Auto-decode crypto if possible
+        crypto_info = self._auto_decode_crypto(match)
+
         QMessageBox.information(
             self,
             self.tr("Protocol applied"),
             self.tr(
                 "Applied protocol: {name}\n"
                 "Confidence: {pct}%\n\n"
-                "{details}\n\n"
+                "{details}"
+                "{crypto}\n\n"
                 "You can adjust the field boundaries in the label view."
             ).format(
                 name=match.name,
                 pct=match.percentage,
                 details=details,
+                crypto=crypto_info,
             ),
         )
+
+    def _auto_decode_crypto(self, match) -> str:
+        """Auto-decode crypto for all supported protocols."""
+        try:
+            cipher = getattr(match, "cipher", "")
+            if not cipher:
+                return ""
+            if not self.proto_analyzer.messages:
+                return ""
+
+            from urh.awre.FrameAnalyzer import analyze_frame, get_decoded_data
+
+            msg = self.proto_analyzer.messages[0]
+            raw_bits = msg.plain_bits_str
+            bits_str = msg.decoded_bits_str or raw_bits
+
+            # Get FrameAnalyzer decoded data for Manchester/PWM protocols
+            segments = analyze_frame(raw_bits)
+            fa_data = get_decoded_data(segments)
+
+            # Helper: get N-bit int from decoded bit string
+            def bits_to_int(s, n):
+                return int(s[:n], 2) if len(s) >= n else 0
+
+            # Helper: get bytes from bit string
+            def bits_to_bytes(s, n):
+                result = []
+                for i in range(0, min(n, len(s)), 8):
+                    result.append(int(s[i: i + 8].ljust(8, "0"), 2))
+                return result
+
+            name = match.name
+            lines = []
+
+            # ── ZERO-KEY protocols (fully auto-decode) ──
+
+            if cipher == "Ford-GF2-CRC":
+                from urh.util.CryptoToolkit import ford_v0_decode_bits
+                if len(fa_data) < 80:
+                    return f"\n\nFord V0: need 80 decoded bits, got {len(fa_data)}"
+                r = ford_v0_decode_bits(fa_data)
+                lines = [
+                    f"--- {name} Decode ---",
+                    f"SN:      {r['serial']:08X}",
+                    f"Button:  0x{r['button']:02X} ({r['button_name']})",
+                    f"Counter: 0x{r['counter']:05X} ({r['counter']})",
+                    f"CRC: {'OK' if r['crc_ok'] else 'FAIL'}",
+                    f"key1: {r['key1_hex']}, key2: {r['key2_hex']}",
+                ]
+
+            elif cipher == "Mitsubishi-XOR":
+                from urh.util.CryptoToolkit import mitsubishi_v0_decode
+                raw_bytes = bits_to_bytes(bits_str, 96)
+                if len(raw_bytes) >= 10:
+                    r = mitsubishi_v0_decode(raw_bytes)
+                    if "error" not in r:
+                        lines = [
+                            f"--- {name} Decode ---",
+                            f"SN:      {r['serial']:08X}",
+                            f"Button:  0x{r['button']:02X}",
+                            f"Counter: 0x{r['counter']:04X} ({r['counter']})",
+                        ]
+
+            elif cipher == "Somfy-XOR":
+                from urh.util.CryptoToolkit import somfy_decode
+                val = bits_to_int(bits_str, 56)
+                if val:
+                    r = somfy_decode(val)
+                    lines = [
+                        f"--- {name} Decode ---",
+                        f"Address: {r['address']:06X}",
+                        f"Button:  0x{r['button']:X}",
+                        f"Counter: 0x{r['counter']:04X} ({r['counter']})",
+                        f"CRC: {'OK' if r['crc_ok'] else 'FAIL'}",
+                    ]
+
+            elif cipher == "Came-Atomo":
+                from urh.util.CryptoToolkit import came_atomo_decrypt
+                val = bits_to_int(bits_str, 62)
+                if val:
+                    r = came_atomo_decrypt(val)
+                    lines = [
+                        f"--- {name} Decode ---",
+                        f"SN:      {r['serial']:08X}",
+                        f"Button:  {r['button']}",
+                        f"Counter: 0x{r['counter']:04X} ({r['counter']})",
+                    ]
+
+            elif cipher == "Came-Twee":
+                from urh.util.CryptoToolkit import came_twee_decrypt
+                val = bits_to_int(bits_str, 54)
+                if val:
+                    r = came_twee_decrypt(val)
+                    lines = [
+                        f"--- {name} Decode ---",
+                        f"SN:      {r['serial']:08X}",
+                        f"Button:  {r['button']}",
+                        f"DIP:     {r['dip_switch']}",
+                    ]
+
+            elif cipher == "Mazda-Siemens":
+                from urh.util.CryptoToolkit import mazda_siemens_decrypt
+                val = bits_to_int(fa_data, 64) if len(fa_data) >= 64 else bits_to_int(bits_str, 64)
+                if val:
+                    r = mazda_siemens_decrypt(val)
+                    lines = [
+                        f"--- {name} Decode ---",
+                        f"SN:      {r['serial']:08X}",
+                        f"Button:  0x{r['button']:02X}",
+                        f"Counter: 0x{r['counter']:04X} ({r['counter']})",
+                        f"Checksum: {'OK' if r['checksum_ok'] else 'FAIL'}",
+                    ]
+
+            elif cipher == "Phoenix-V2":
+                from urh.util.CryptoToolkit import phoenix_v2_decrypt
+                val = bits_to_int(bits_str, 52)
+                if val:
+                    r = phoenix_v2_decrypt(val)
+                    lines = [
+                        f"--- {name} Decode ---",
+                        f"SN:      {r['serial']:08X}",
+                        f"Button:  0x{r['button']:X}",
+                        f"Counter: 0x{r['counter']:04X} ({r['counter']})",
+                    ]
+
+            elif cipher == "SecurityPlus":
+                from urh.util.CryptoToolkit import secplus_v2_decode
+                val = bits_to_int(bits_str, 62)
+                if val:
+                    r = secplus_v2_decode(val)
+                    lines = [
+                        f"--- {name} Decode ---",
+                        f"Rolling: {r['rolling_code']}",
+                        f"Fixed:   {r['fixed_code']}",
+                        f"Button:  {r['button']}",
+                    ]
+
+            # ── KNOWN-KEY protocols (hardcoded keys) ──
+
+            elif cipher == "KIA-V3-V4":
+                from urh.util.CryptoToolkit import kia_v3_v4_decrypt
+                # Extract serial (28-bit) and encrypted (32-bit) from labels
+                serial, encrypted = self._extract_serial_and_hop(msg)
+                if serial and encrypted:
+                    r = kia_v3_v4_decrypt(encrypted, serial)
+                    lines = [
+                        f"--- {name} Decode (master key: 0xA8F5DFFC8DAA5CDB) ---",
+                        f"SN:      {serial:07X}",
+                        f"Button:  0x{r['button']:X}",
+                        f"Counter: 0x{r['counter']:04X} ({r['counter']})",
+                        f"DISC:    0x{r['disc']:03X}",
+                    ]
+                else:
+                    lines = [
+                        f"--- {name} ---",
+                        "Auto-decode: need 'id' and 'encrypted' labels.",
+                        "Open Crypto Toolkit to provide serial + hop code.",
+                    ]
+
+            elif cipher == "KIA-V5-Mixer":
+                from urh.util.CryptoToolkit import kia_v5_mixer_decrypt
+                # KIA V5: 64-bit data = btn(4) + serial(28) + encrypted(32)
+                val = bits_to_int(bits_str, 64)
+                if val:
+                    encrypted = val & 0xFFFFFFFF
+                    cnt = kia_v5_mixer_decrypt(encrypted)
+                    serial = (val >> 32) & 0xFFFFFFF
+                    button = (val >> 60) & 0xF
+                    lines = [
+                        f"--- {name} Decode (key: STFRKE00) ---",
+                        f"SN:      {serial:07X}",
+                        f"Button:  0x{button:X}",
+                        f"Counter: 0x{cnt:04X} ({cnt})",
+                    ]
+
+            elif cipher == "KIA-V6-AES":
+                from urh.util.CryptoToolkit import kia_v6_decrypt
+                ct_bytes = bits_to_bytes(bits_str, 128)
+                if len(ct_bytes) >= 16:
+                    r = kia_v6_decrypt(ct_bytes)
+                    lines = [
+                        f"--- {name} Decode (AES key: hardcoded) ---",
+                        f"SN:      {r['serial']:06X}",
+                        f"Button:  0x{r['button']:02X}",
+                        f"Counter: 0x{r['counter']:08X} ({r['counter']})",
+                        f"CRC: {'OK' if r['crc_ok'] else 'FAIL'}",
+                    ]
+
+            elif cipher == "Porsche-Cayenne":
+                from urh.util.CryptoToolkit import porsche_cayenne_decrypt
+                val = bits_to_int(bits_str, 64)
+                if val:
+                    serial = (val >> 32) & 0xFFFFFF
+                    encrypted = val & 0xFFFFFFFF
+                    r = porsche_cayenne_decrypt(encrypted, serial)
+                    lines = [
+                        f"--- {name} Decode ---",
+                        f"SN:      {serial:06X}",
+                        f"Button:  0x{r['button']:X}",
+                        f"Counter: 0x{r['counter']:04X} ({r['counter']})",
+                    ]
+
+            elif cipher == "Subaru-XOR":
+                from urh.util.CryptoToolkit import subaru_decrypt
+                data_bytes = bits_to_bytes(bits_str, 64)
+                if len(data_bytes) >= 8:
+                    serial = (data_bytes[1] << 16) | (data_bytes[2] << 8) | data_bytes[3]
+                    button = data_bytes[0] & 0x0F
+                    r = subaru_decrypt(data_bytes[4:8], serial)
+                    lines = [
+                        f"--- {name} Decode ---",
+                        f"SN:      {serial:06X}",
+                        f"Button:  0x{button:X}",
+                        f"Hop:     {' '.join(f'{b:02X}' for b in r)}",
+                    ]
+
+            elif cipher == "Scher-Khan":
+                from urh.util.CryptoToolkit import scher_khan_decrypt
+                data_bytes = bits_to_bytes(bits_str, 56)
+                if len(data_bytes) >= 7:
+                    serial = (data_bytes[0] << 16) | (data_bytes[1] << 8) | data_bytes[2]
+                    r = scher_khan_decrypt(data_bytes, serial)
+                    lines = [
+                        f"--- {name} Decode ---",
+                        f"SN:      {serial:06X}",
+                        f"Decrypted: {' '.join(f'{b:02X}' for b in r)}",
+                        "(Full decode needs device key tables)",
+                    ]
+
+            elif cipher == "PSA-TEA":
+                from urh.util.CryptoToolkit import psa_bruteforce_0x23
+                val = bits_to_int(bits_str, 64)
+                if val:
+                    v0 = (val >> 32) & 0xFFFFFFFF
+                    v1 = val & 0xFFFFFFFF
+                    serial = (v0 >> 8) & 0xFFFFFF
+                    d0, d1 = psa_bruteforce_0x23(v0, v1, serial)
+                    lines = [
+                        f"--- {name} Decode (mode 0x23 XOR) ---",
+                        f"SN:      {serial:06X}",
+                        f"Decrypted: {d0:08X} {d1:08X}",
+                        "(Try mode 0x36 TEA in Crypto Toolkit if invalid)",
+                    ]
+
+            # ── USER-KEY protocols (need key from user) ──
+
+            elif cipher == "KeeLoq":
+                lines = [
+                    f"--- {name} ---",
+                    "KeeLoq encrypted. Open Crypto Toolkit to:",
+                    "  - Try common manufacturer keys",
+                    "  - Brute-force with two captures",
+                    "  - Enter a known device/manufacturer key",
+                ]
+
+            elif cipher == "FAAC-SLH":
+                lines = [
+                    f"--- {name} ---",
+                    "FAAC SLH (KeeLoq). Open Crypto Toolkit to:",
+                    "  - Provide manufacturer key + seed",
+                    "  - Or capture programming sequence for seed extraction",
+                ]
+
+            elif cipher == "Nice-FlorS":
+                lines = [
+                    f"--- {name} ---",
+                    "Nice Flor-S encrypted. Needs 32-byte rainbow table",
+                    "(extracted from remote's EEPROM).",
+                    "Open Crypto Toolkit to provide the table.",
+                ]
+
+            elif cipher == "Alutech-AT4N":
+                from urh.util.CryptoToolkit import alutech_at4n_decrypt
+                data_bytes = bits_to_bytes(bits_str, 72)
+                if len(data_bytes) >= 8:
+                    r = alutech_at4n_decrypt(data_bytes, 0)
+                    lines = [
+                        f"--- {name} ---",
+                        "Alutech AT-4N (modified TEA).",
+                        "Needs device-specific rainbow table file.",
+                        "Open Crypto Toolkit to provide it.",
+                    ]
+
+            elif cipher == "VAG":
+                from urh.util.CryptoToolkit import vag_decode
+                val = bits_to_int(fa_data, 80) if len(fa_data) >= 80 else bits_to_int(bits_str, 80)
+                if val:
+                    k1 = (val >> 16) & 0xFFFFFFFFFFFFFFFF
+                    k2 = val & 0xFFFF
+                    r = vag_decode(k1, k2)
+                    if "error" not in r:
+                        lines = [
+                            f"--- {name} Decode ({r['cipher']}, {r['vehicle_type']}) ---",
+                            f"SN:      {r['serial']:08X}",
+                            f"Button:  {r['button_name']}",
+                            f"Counter: 0x{r['counter']:06X} ({r['counter']})",
+                            f"Type:    {r['vag_type']} (key #{r['key_index']})",
+                        ]
+                    else:
+                        lines = [
+                            f"--- {name} ({r['vehicle_type']}) ---",
+                            "Could not decrypt with built-in keys.",
+                            "Try Crypto Toolkit with custom AUT64 key.",
+                ]
+
+            if not lines:
+                return ""
+
+            return "\n\n" + "\n".join(lines)
+
+        except Exception as e:
+            return f"\n\nCrypto decode error: {e}"
+
+    def _extract_serial_and_hop(self, msg):
+        """Extract serial and encrypted hop from message labels."""
+        serial = 0
+        encrypted = 0
+        bits = msg.decoded_bits_str or msg.plain_bits_str
+        for label in msg.message_type:
+            name_l = label.name.lower()
+            field_bits = bits[label.start: label.end]
+            if not field_bits:
+                continue
+            if "id" in name_l or "serial" in name_l:
+                serial = int(field_bits, 2) if field_bits else 0
+            elif "encrypted" in name_l or "hop" in name_l or "key1" in name_l:
+                encrypted = int(field_bits[:32], 2) if len(field_bits) >= 32 else 0
+        return serial, encrypted
 
     @pyqtSlot()
     def on_btn_save_protocol_clicked(self):

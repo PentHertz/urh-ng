@@ -6307,7 +6307,7 @@ PROTOCOL_DATABASE = [
         "reset_limit": 5000,
         "preamble_bits": "",
         "sync_bytes": "",
-        "msg_len_bits": 64,
+        "msg_len_bits": 80,
         "checksum": "crc8",
         "fields": ["model", "id", "button", "counter", "encrypted"],
     },

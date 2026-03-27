@@ -208,26 +208,104 @@ class ProtocolMatcher:
             return []
 
         # Split messages that contain repeated packets.
-        # Use only the first complete packet for scoring.
+        # Strip trailing zeros so they don't inflate scoring.
         raw_bits = []
         for bs in features["bit_strings"]:
             first_pkt = _extract_first_packet(bs)
-            raw_bits.append(first_pkt)
-        decoded_cache = {}  # decoder_name -> list of (decoded_data, errors, state)
+            # Strip trailing padding (long zero runs)
+            stripped = first_pkt.rstrip("0")
+            # Keep a few trailing zeros (might be data)
+            if len(first_pkt) - len(stripped) > 8:
+                stripped = stripped + "0" * 4
+            raw_bits.append(stripped)
+
+        # Update features with stripped lengths for base scoring
+        stripped_lens = [len(bs) for bs in raw_bits]
+        if stripped_lens:
+            features["median_length"] = int(
+                np.median(stripped_lens)
+            )
+        # Use FrameAnalyzer to detect encoding and decode data
+        from urh.awre.FrameAnalyzer import (
+            analyze_frame,
+            get_decoded_data,
+            get_frame_summary,
+        )
+
+        # Analyze each message with FrameAnalyzer
+        frame_analyses = []
+        for bs in raw_bits[:5]:
+            segments = analyze_frame(bs)
+            summary = get_frame_summary(segments)
+            data = get_decoded_data(segments)
+            frame_analyses.append(
+                (segments, summary, data)
+            )
+
+        # Build decoded_cache: for each message, the
+        # FrameAnalyzer already detected the best encoding
+        # and decoded the data portion
+        decoded_cache = {}
+        # "FrameAnalyzer" is a virtual decoder that uses
+        # the auto-detected encoding per segment
+        fa_results = []
+        for segments, summary, data in frame_analyses:
+            fa_results.append((data, 0, "success", 0))
+        decoded_cache["_frame_analyzer"] = fa_results
+
+        # Detected encoding from FrameAnalyzer (for modulation matching)
+        fa_encoding = "nrz"
+        fa_decoded_len = 0
+        if frame_analyses:
+            fa_encoding = frame_analyses[0][1].get(
+                "data_encoding", "nrz"
+            )
+            fa_decoded_len = frame_analyses[0][1].get(
+                "data_bits_decoded", 0
+            )
+
+        # Store FrameAnalyzer results in features for base scoring
+        features["fa_encoding"] = fa_encoding
+        features["fa_decoded_len"] = fa_decoded_len
+
+        # Also try each explicit decoder for protocols
+        # whose modulation might differ from what the
+        # FrameAnalyzer detected
         for dec in self.available_decodings:
             try:
                 results = []
-                for bs in raw_bits[:5]:  # sample first 5 messages
-                    # Find data start: skip preamble + gap + framing
-                    data_start = _find_pwm_data_start(bs)
-                    data_portion = bs[data_start:]
-                    inpt = array.array("B", [int(b) for b in data_portion])
-                    decoded, errors, state = dec.code(True, inpt)
-                    decoded_str = "".join(str(b) for b in decoded)
-                    results.append((decoded_str, errors, state, data_start))
+                for bs in raw_bits[:5]:
+                    inpt = array.array(
+                        "B", [int(b) for b in bs]
+                    )
+                    decoded, errors, state = dec.code(
+                        True, inpt
+                    )
+                    decoded_str = "".join(
+                        str(b) for b in decoded
+                    )
+                    ds = _find_data_start(decoded_str)
+                    data_only = decoded_str[ds:]
+                    results.append(
+                        (data_only, errors, state, ds)
+                    )
                 decoded_cache[dec.name] = results
             except Exception as e:
-                logger.debug(f"ProtocolMatcher: decoder {dec.name} failed: {e}")
+                logger.debug(
+                    "ProtocolMatcher: decoder "
+                    f"{dec.name} failed: {e}"
+                )
+
+        # Build modulation compatibility map:
+        # FrameAnalyzer detected encoding → compatible protocol modulations
+        _ENCODING_TO_MODULATIONS = {
+            "pwm": {"PWM", "PPM", "PIWM"},
+            "manchester": {"MANCHESTER", "DMC"},
+            "nrz": {"PCM", "NRZ", "NRZS", "RZ"},
+        }
+        fa_compat_mods = _ENCODING_TO_MODULATIONS.get(
+            fa_encoding, set()
+        )
 
         scored = []
         for proto in PROTOCOL_DATABASE:
@@ -240,24 +318,52 @@ class ProtocolMatcher:
             proto_len = proto.get("msg_len_bits", 0)
             modulation = proto.get("modulation", "")
 
+            # Modulation compatibility: penalize protocols whose
+            # modulation doesn't match the FrameAnalyzer's detected
+            # encoding. E.g., if we detected PWM data, NRZ/Manchester
+            # protocols should score lower.
+            mod_compatible = True
+            if fa_encoding != "nrz" and modulation:
+                mod_upper = modulation.upper()
+                if not any(m in mod_upper for m in fa_compat_mods):
+                    # Modulation mismatch: the signal uses PWM but
+                    # this protocol expects Manchester (or vice versa)
+                    base_score *= 0.5
+                    details["mod_mismatch"] = (
+                        f"detected={fa_encoding}, proto={modulation}"
+                    )
+                    mod_compatible = False
+
             # Get candidate decoders for this modulation type
-            candidate_names = list(self.MODULATION_DECODERS.get(modulation, []))
-            # Always also try NRZ as baseline
+            candidate_names = list(
+                self.MODULATION_DECODERS.get(modulation, [])
+            )
             if "Non Return To Zero (NRZ)" not in candidate_names:
                 candidate_names.append("Non Return To Zero (NRZ)")
+            # Always try FrameAnalyzer (auto-detected encoding)
+            candidate_names.append("_frame_analyzer")
 
+            all_candidates = []
+            # Add FrameAnalyzer as a virtual decoder
+            if "_frame_analyzer" in decoded_cache:
+                all_candidates.append(
+                    ("_frame_analyzer", decoded_cache["_frame_analyzer"])
+                )
+            # Add explicit decoders
             for dec in self.available_decodings:
                 if dec.name not in candidate_names:
-                    # Also allow partial name matches
                     if not any(
-                        cn in dec.name or dec.name in cn for cn in candidate_names
+                        cn in dec.name or dec.name in cn
+                        for cn in candidate_names
                     ):
                         continue
-
                 if dec.name not in decoded_cache:
                     continue
+                all_candidates.append(
+                    (dec.name, decoded_cache[dec.name])
+                )
 
-                dec_results = decoded_cache[dec.name]
+            for dec_name, dec_results in all_candidates:
                 if not dec_results:
                     continue
 
@@ -297,7 +403,7 @@ class ProtocolMatcher:
 
                 if proto_len > 0:
                     len_diff = abs(median_data_len - proto_len)
-                    tolerance = max(proto_len * 0.15, 8)
+                    tolerance = max(proto_len * 0.30, 8)
 
                     if len_diff <= tolerance:
                         len_match = 1.0 - len_diff / tolerance
@@ -320,23 +426,91 @@ class ProtocolMatcher:
 
                         if bonus > best_decode_bonus:
                             best_decode_bonus = bonus
-                            best_decoder = dec
+                            # Map decoder name to actual Encoding object
+                            if dec_name == "_frame_analyzer":
+                                # Use the auto-detected encoding from FrameAnalyzer
+                                # Map to the corresponding URH decoder
+                                if frame_analyses:
+                                    fa_enc = frame_analyses[0][1].get("data_encoding", "nrz")
+                                    best_decoder = self._find_decoder_for_encoding(fa_enc)
+                                else:
+                                    best_decoder = None
+                            else:
+                                best_decoder = self._find_decoding_by_name(dec_name)
                             best_decode_info = (
-                                f"{dec.name}: decoded_data={median_data_len} "
+                                f"{dec_name}: decoded_data={median_data_len} "
                                 f"vs proto={proto_len}, errors={avg_errors:.0f}"
                             )
 
-            final_score = min(base_score + best_decode_bonus, 1.0)
+            final_score = min(
+                base_score + best_decode_bonus, 1.0
+            )
             if best_decode_info:
                 details["decoder_match"] = best_decode_info
 
-            if final_score >= self.MIN_SCORE_THRESHOLD:
-                # If no decoder matched via bruteforce, fall back to modulation mapping
-                if best_decoder is None:
-                    best_decoder = self._find_best_decoder(proto, features)
+            proto_name = proto.get("name", "")
 
-                # Find cipher for this protocol
-                proto_name = proto.get("name", "")
+            # ── Field coverage scoring ──────────────────────────
+            # Penalize protocols where decoded data is much longer
+            # than the protocol's expected length (leftover unlabeled
+            # bytes = wrong match). Bonus when data fits tightly.
+            if proto_len > 0:
+                # Use the best decoded length from the decoder loop
+                best_data_len = 0
+                for dec_name, dec_results in all_candidates:
+                    for dbits, _, _, _ in dec_results:
+                        if dbits:
+                            stripped = dbits.rstrip("0")
+                            if stripped:
+                                best_data_len = max(
+                                    best_data_len, len(stripped)
+                                )
+
+                if best_data_len > 0:
+                    # Leftover = non-zero bits beyond expected proto length
+                    leftover = best_data_len - proto_len
+                    if leftover <= 2:
+                        # Tight fit: data matches proto length exactly
+                        final_score = min(final_score + 0.08, 1.0)
+                        details["coverage"] = "tight fit"
+                    elif leftover <= proto_len * 0.15:
+                        # Small leftover: acceptable
+                        final_score = min(final_score + 0.03, 1.0)
+                        details["coverage"] = f"+{leftover}b leftover"
+                    elif leftover > proto_len * 0.3:
+                        # Large leftover: data much longer than proto
+                        # expects → likely wrong protocol
+                        penalty = min(leftover / (proto_len * 2), 0.15)
+                        final_score = max(final_score - penalty, 0.0)
+                        details["coverage"] = (
+                            f"-{penalty:.0%} ({leftover}b unlabeled)"
+                        )
+
+            # Bonus for protocols with known bitstream layouts
+            for lkey in self.KNOWN_LAYOUTS:
+                if lkey in proto_name:
+                    final_score = min(
+                        final_score + 0.05, 1.0
+                    )
+                    details["known_layout"] = lkey
+                    break
+
+            # Bonus for protocols with crypto toolkit support
+            for ckey in self.PROTOCOL_CIPHERS:
+                if ckey in proto_name:
+                    final_score = min(
+                        final_score + 0.05, 1.0
+                    )
+                    details["cipher_support"] = (
+                        self.PROTOCOL_CIPHERS[ckey]
+                    )
+                    break
+
+            if final_score >= self.MIN_SCORE_THRESHOLD:
+                if best_decoder is None:
+                    best_decoder = self._find_best_decoder(
+                        proto, features
+                    )
                 cipher = ""
                 for key, cval in self.PROTOCOL_CIPHERS.items():
                     if key in proto_name:
@@ -348,12 +522,27 @@ class ProtocolMatcher:
                     final_score,
                     details,
                     recommended_decoder=best_decoder,
-                    leading_zeros_count=features.get("leading_zeros", 0),
+                    leading_zeros_count=features.get(
+                        "leading_zeros", 0
+                    ),
                     cipher=cipher,
                 )
                 scored.append(match)
 
-        scored.sort(key=lambda m: m.score, reverse=True)
+        # Sort by score, with tiebreaker: prefer protocols whose
+        # field layout covers the data tightly (fewer unlabeled bits).
+        # "tight fit" > "+Nb leftover" > "-N% unlabeled"
+        def _sort_key(m):
+            coverage = m.details.get("coverage", "")
+            # Tiebreaker: 0.001 bonus for tight fit, penalty for unlabeled
+            tiebreak = 0.0
+            if "tight fit" in coverage:
+                tiebreak = 0.002
+            elif "unlabeled" in coverage:
+                tiebreak = -0.002
+            return m.score + tiebreak
+
+        scored.sort(key=_sort_key, reverse=True)
         return scored[:max_results]
 
     def find_best_decoder(self) -> Tuple[Optional[Encoding], float, str]:
@@ -502,7 +691,17 @@ class ProtocolMatcher:
 
     @staticmethod
     def _find_common_preamble(bit_strings: List[str]) -> str:
-        """Find the common alternating preamble pattern across messages."""
+        """Find the common preamble pattern across messages.
+
+        Detects all Flipper-ARF preamble types:
+        1. NRZ alternating: 101010... (KeeLoq, HCS200, KIA V0)
+        2. Manchester pairs: 10011001... or 01100110... (Ford V0, Somfy)
+        3. Constant value: 111111... or 000000... (CAME)
+        4. PWM preamble: 100100100... or 110110110... (HCS200 PWM)
+        5. Header cycle: 111000111000... (Nice Flor-S)
+
+        Returns the longest match.
+        """
         if not bit_strings:
             return ""
 
@@ -523,17 +722,82 @@ class ProtocolMatcher:
 
         common = bit_strings[0][:common_len]
 
-        # Find where the alternating pattern ends
+        # Try 1: NRZ alternating (101010...)
         alt_len = 0
         for i in range(len(common)):
             if i > 0 and common[i] == common[i - 1]:
                 break
             alt_len = i + 1
 
-        if alt_len >= 4:
-            return common[:alt_len]
+        # Try 2: Manchester pairs (1001 or 0110 repeating)
+        man_len = 0
+        i = 0
+        while i + 3 < len(common):
+            chunk = common[i: i + 4]
+            if chunk in ("1001", "0110"):
+                man_len = i + 4
+                i += 4
+            else:
+                break
 
-        # If no alternating pattern, return common prefix as-is
+        # Try 3: Constant value (1111... or 0000...)
+        const_len = 0
+        if common:
+            val = common[0]
+            for i in range(len(common)):
+                if common[i] != val:
+                    break
+                const_len = i + 1
+
+        # Try 4: PWM preamble (100 or 110 repeating)
+        pwm_len = 0
+        if len(common) >= 6:
+            pat = common[:3]
+            if pat in ("100", "110"):
+                j = 0
+                while j + 2 < len(common):
+                    if common[j: j + 3] == pat:
+                        j += 3
+                    else:
+                        break
+                pwm_len = j
+
+        # Try 5: Header cycle (N 1s + N 0s repeating, e.g. 111000)
+        hdr_len = 0
+        if len(common) >= 6 and common[0] == "1":
+            n = 0
+            while n < len(common) and common[n] == "1":
+                n += 1
+            if 2 <= n <= 8 and n < len(common):
+                m = 0
+                p = n
+                while p < len(common) and common[p] == "0":
+                    m += 1
+                    p += 1
+                if m >= 2 and abs(m - n) <= 1:
+                    period = n + m
+                    hdr_len = period
+                    while hdr_len + period <= len(common):
+                        cycle = common[hdr_len: hdr_len + period]
+                        if cycle.count("1") >= n - 1 and cycle.count("0") >= m - 1:
+                            hdr_len += period
+                        else:
+                            break
+
+        # Pick longest valid preamble
+        candidates = [
+            (alt_len, 4), (man_len, 8), (const_len, 8),
+            (pwm_len, 6), (hdr_len, 6),
+        ]
+        best_len = 0
+        for clen, min_req in candidates:
+            if clen >= min_req and clen > best_len:
+                best_len = clen
+
+        if best_len >= 4:
+            return common[:best_len]
+
+        # If no recognizable pattern, return common prefix as-is
         # (some protocols have fixed preambles like 0xFFFF)
         return common
 
@@ -569,22 +833,43 @@ class ProtocolMatcher:
         weights_used = 0.0
 
         # 1. Message length match (weight: 0.35)
-        # For PWM/PPM modulations, raw bits are ~2-3x the data bits
-        # (short pulse = 2 raw bits, long pulse = 3 raw bits)
+        # Use FrameAnalyzer's decoded length when available (more accurate
+        # than raw bit estimation for PWM/Manchester encoded signals).
         weight = 0.35
         proto_len = proto.get("msg_len_bits", 0)
         modulation = proto.get("modulation", "")
         if proto_len > 0:
             median_len = features["median_length"]
+            fa_dec_len = features.get("fa_decoded_len", 0)
+            fa_enc = features.get("fa_encoding", "nrz")
 
             # Account for preamble/sync overhead in raw stream
             preamble_overhead = len(features.get("preamble_bits", ""))
             data_bits_raw = median_len - preamble_overhead
 
-            # For PWM/PPM, each data bit takes 2-3 raw bits
-            # Try multiple expansion factors and pick the best match
-            if "PWM" in modulation or "PPM" in modulation:
-                # Try expansion factors 2.0, 2.5, 3.0 — pick best
+            # Check if the protocol's modulation matches the FrameAnalyzer's
+            # detected encoding. If so, use the precise decoded length.
+            mod_upper = modulation.upper()
+            fa_matches_proto = False
+            if fa_enc == "pwm" and ("PWM" in mod_upper or "PPM" in mod_upper):
+                fa_matches_proto = True
+            elif fa_enc == "manchester" and (
+                "MANCHESTER" in mod_upper or "DMC" in mod_upper
+            ):
+                fa_matches_proto = True
+            elif fa_enc == "nrz" and (
+                "PCM" in mod_upper or "NRZ" in mod_upper or "RZ" in mod_upper
+            ):
+                fa_matches_proto = True
+
+            if fa_matches_proto and fa_dec_len > 0:
+                # Use FrameAnalyzer's precise decoded length
+                effective_data_bits = fa_dec_len
+                len_diff = abs(effective_data_bits - proto_len)
+                tolerance = max(proto_len * 0.20, 8)
+                which = f"decoded={fa_dec_len}"
+            elif "PWM" in mod_upper or "PPM" in mod_upper:
+                # Fallback: estimate from raw bits with expansion factors
                 best_diff = float("inf")
                 best_eff = data_bits_raw
                 for factor in (2.0, 2.5, 3.0):
@@ -599,7 +884,7 @@ class ProtocolMatcher:
                 which = f"raw={median_len}, ~data={int(effective_data_bits)}"
             else:
                 # PCM/Manchester: raw bits ≈ data bits (or 2x for Manchester)
-                if "MANCHESTER" in modulation:
+                if "MANCHESTER" in mod_upper or "DMC" in mod_upper:
                     effective_data_bits = data_bits_raw / 2.0
                 else:
                     effective_data_bits = data_bits_raw
@@ -722,6 +1007,16 @@ class ProtocolMatcher:
 
         return best_decoder
 
+    def _find_decoder_for_encoding(self, encoding_type: str) -> Optional[Encoding]:
+        """Map FrameAnalyzer encoding type to URH decoder."""
+        name_map = {
+            "pwm": "PWM (Short=1, Long=0)",
+            "manchester": "Manchester I",
+            "nrz": "Non Return To Zero (NRZ)",
+        }
+        dec_name = name_map.get(encoding_type, "Non Return To Zero (NRZ)")
+        return self._find_decoding_by_name(dec_name)
+
     def _find_decoding_by_name(self, name: str) -> Optional[Encoding]:
         """Find a decoding by name (partial match) in available decodings."""
         name_lower = name.lower()
@@ -755,29 +1050,115 @@ class ProtocolMatcher:
     # Maps protocol names to their cipher, so the crypto toolkit
     # auto-selects the right cipher after auto-identification.
     PROTOCOL_CIPHERS = {
+        # KeeLoq-based
         "HCS200": "KeeLoq",
         "HCS300": "KeeLoq",
         "KeeLoq": "KeeLoq",
-        "FAAC SLH": "KeeLoq",
-        "NICE Flor": "KeeLoq",
         "StarLine": "KeeLoq",
-        "Subaru car": "KeeLoq",
+        "Sheriff": "KeeLoq",
+        "KingGates": "KeeLoq",
+        "Jarolift": "KeeLoq",
+        "Suzuki": "KeeLoq",
+        # KeeLoq with specific keys / learning modes
+        "FAAC SLH": "FAAC-SLH",
+        "KIA V3": "KIA-V3-V4",
+        "KIA V4": "KIA-V3-V4",
+        # Proprietary ciphers per protocol
+        "NICE Flor": "Nice-FlorS",
         "Ford V0": "Ford-GF2-CRC",
-        "Fiat Marelli": "TEA",
-        "Fiat SPA": "TEA",
-        "PSA Peugeot": "TEA",
-        "VAG VW Audi": "TEA",
         "KIA V0": "KeeLoq",
         "KIA V1": "KeeLoq",
         "KIA V2": "KeeLoq",
-        "KIA V3": "KeeLoq",
         "KIA V5": "KIA-V5-Mixer",
-        "KIA V6": "AES-128",
-        "Porsche Cayenne": "KeeLoq",
+        "KIA V6": "KIA-V6-AES",
         "Mitsubishi": "Mitsubishi-XOR",
-        "Somfy": "TEA",
-        "Scher-Khan": "KeeLoq",
-        "Suzuki": "KeeLoq",
+        "Porsche Cayenne": "Porsche-Cayenne",
+        "Subaru": "Subaru-XOR",
+        "Mazda": "Mazda-Siemens",
+        # XOR / lightweight ciphers
+        "Somfy Telis": "Somfy-XOR",
+        "Somfy Keytis": "Somfy-XOR",
+        "Somfy RTS": "Somfy-XOR",
+        "Came Atomo": "Came-Atomo",
+        "Came Twee": "Came-Twee",
+        "Scher-Khan": "Scher-Khan",
+        "Phoenix": "Phoenix-V2",
+        "Alutech": "Alutech-AT4N",
+        # TEA / AES ciphers
+        "Fiat Marelli": "TEA",
+        "Fiat SPA": "TEA",
+        "PSA Peugeot": "PSA-TEA",
+        "PSA": "PSA-TEA",
+        "VAG VW": "VAG",
+        "VAG Audi": "VAG",
+        # Ternary encoding
+        "Security+": "SecurityPlus",
+        "LiftMaster": "SecurityPlus",
+        "Chamberlain": "SecurityPlus",
+    }
+
+    # ── Known preamble/sync structures per protocol ────────────
+    # Each entry: {"preamble_bits": count, "sync_type": type, "gap_bits": count}
+    # sync_type: "zeros" = zero gap after alternating preamble (HCS200)
+    #            "manchester_violation" = 00/11 pairs (Ford V0)
+    #            "fixed" = fixed bit pattern
+    #            "none" = no sync, data starts immediately after preamble
+    KNOWN_PREAMBLES = {
+        # HCS200/300: 12 pairs of 10 + zero gap
+        "HCS200": {
+            "raw_pattern": "alternating",
+            "preamble_bits": 24,
+            "sync_type": "zeros",
+            "gap_min": 8,
+        },
+        "HCS300": {
+            "raw_pattern": "alternating",
+            "preamble_bits": 24,
+            "sync_type": "zeros",
+            "gap_min": 8,
+        },
+        # Ford V0: Manchester-encoded 0s as preamble + violation gap
+        "Ford V0": {
+            "raw_pattern": "manchester_preamble",
+            "preamble_bits": 8,
+            "sync_type": "manchester_violation",
+            "gap_min": 4,
+        },
+        # CAME: short preamble + long gap
+        "CAME": {
+            "raw_pattern": "alternating",
+            "preamble_bits": 12,
+            "sync_type": "zeros",
+            "gap_min": 4,
+        },
+        # Fiat Marelli: 0xFFFF preamble
+        "Fiat Marelli": {
+            "raw_pattern": "constant_high",
+            "preamble_bits": 16,
+            "sync_type": "none",
+            "gap_min": 0,
+        },
+        # Somfy: hardware sync pulse
+        "Somfy": {
+            "raw_pattern": "alternating",
+            "preamble_bits": 16,
+            "sync_type": "zeros",
+            "gap_min": 4,
+        },
+        # KIA V6: long preamble (640 + 38 pairs)
+        "KIA V6": {
+            "raw_pattern": "manchester_preamble",
+            "preamble_bits": 40,
+            "sync_type": "manchester_violation",
+            "gap_min": 4,
+        },
+        # Generic: try auto-detect
+        "_default": {
+            "raw_pattern": "auto",
+            "preamble_bits": 0,
+            "sync_type": "auto",
+            "gap_min": 4,
+        },
     }
 
     # ── Known protocol bitstream layouts ───────────────────────
@@ -825,12 +1206,12 @@ class ProtocolMatcher:
             ("id", 8, 0, "big", 1),
             ("button", 4, 0, "big", 3),
         ],
-        # Ford V0
+        # Ford V0 (key1=64 + key2=16 = 80 bits, PHZ layout)
+        # Fields after XOR de-obfuscation: SN(32) + BTN(4) + CNT(20)
+        # Use Crypto Toolkit → Ford V0 for full decode
         "Ford V0": [
-            ("id", 32, 0, "big", 1),
-            ("button", 4, 0, "big", 3),
-            ("counter", 16, 0, "big", 3),
-            ("checksum", 12, 0, "big", 1),
+            ("key1", 64, 0, "big", 1),
+            ("key2", 16, 0, "big", 1),
         ],
         # Fiat Marelli (80 bits after preamble)
         "Fiat Marelli": [
@@ -985,63 +1366,117 @@ class ProtocolMatcher:
         if not sample_bits:
             return None
 
+        # Look up protocol-specific preamble structure
+        proto_name = entry.get("name", "")
+        preamble_info = None
+        for pkey, pinfo in self.KNOWN_PREAMBLES.items():
+            if pkey in proto_name:
+                preamble_info = pinfo
+                break
+
         # Skip leading zeros
         i = 0
         while i < len(sample_bits) and sample_bits[i] == "0":
             i += 1
         leading_zeros = i
 
-        # Detect alternating preamble (101010...)
-        # Preamble is always even length (pairs of 10 or 01)
-        preamble_start = i
-        alt_i = i
-        while alt_i < len(sample_bits) - 1:
-            if sample_bits[alt_i] == sample_bits[alt_i + 1]:
-                break
-            alt_i += 1
-        raw_len = alt_i - i
-        # Round up to even (the last bit of the alternating pattern
-        # may blend into the gap but still belongs to the preamble)
-        preamble_len = raw_len + (raw_len % 2) if raw_len >= 4 else 0
-
-        # Gap/guard between preamble and PWM data.
-        # After the preamble, there are zeros (the gap), then possibly
-        # framing bits (short pulse + long gap), before the actual PWM data.
-        # The sync/gap label covers everything up to the first clean PWM data.
-        gap_start = preamble_start + preamble_len
-        gap_end = gap_start
-
-        # Skip zeros
-        while gap_end < len(sample_bits) and sample_bits[gap_end] == "0":
-            gap_end += 1
-
-        # Skip past any framing/guard bits before clean PWM data.
-        # Framing shows as short HIGH runs followed by outlier LOW runs (>2).
-        # Clean PWM data has LOW runs of 1-2 only.
-        if gap_end < len(sample_bits):
-            scan = gap_end
-            while scan < len(sample_bits):
-                # Find next HIGH run
-                if sample_bits[scan] != "1":
-                    scan += 1
-                    continue
-                # Measure HIGH run
-                hi_end = scan
-                while hi_end < len(sample_bits) and sample_bits[hi_end] == "1":
-                    hi_end += 1
-                # Measure following LOW run
-                lo_end = hi_end
-                while lo_end < len(sample_bits) and sample_bits[lo_end] == "0":
-                    lo_end += 1
-                lo_len = lo_end - hi_end
-                if lo_len > 2:
-                    # Outlier LOW — this is still framing, skip past it
-                    gap_end = lo_end
-                    scan = lo_end
+        if (
+            preamble_info
+            and preamble_info["raw_pattern"]
+            == "manchester_preamble"
+        ):
+            # Manchester preamble: repeating 1001 or 0110 pattern
+            # Skip the repeating pattern
+            preamble_start = i
+            pat_len = 0
+            while i + 3 < len(sample_bits):
+                chunk = sample_bits[i: i + 4]
+                if chunk in ("1001", "0110"):
+                    pat_len += 4
+                    i += 4
                 else:
-                    # Clean pair — PWM data starts here
-                    gap_end = scan
                     break
+            preamble_len = pat_len if pat_len >= 4 else 0
+
+            # Manchester violation gap: 00 or 11 pairs
+            gap_start = preamble_start + preamble_len
+            gap_end = gap_start
+            while gap_end + 1 < len(sample_bits):
+                pair = sample_bits[gap_end: gap_end + 2]
+                if pair in ("00", "11"):
+                    gap_end += 2
+                else:
+                    break
+
+        elif (
+            preamble_info
+            and preamble_info["raw_pattern"]
+            == "constant_high"
+        ):
+            # Constant 1s preamble (e.g., Fiat 0xFFFF)
+            preamble_start = i
+            while i < len(sample_bits) and sample_bits[i] == "1":
+                i += 1
+            preamble_len = i - preamble_start
+            gap_start = i
+            gap_end = i
+            while (
+                gap_end < len(sample_bits)
+                and sample_bits[gap_end] == "0"
+            ):
+                gap_end += 1
+
+        else:
+            # Default: alternating preamble (101010...)
+            preamble_start = i
+            alt_i = i
+            while alt_i < len(sample_bits) - 1:
+                if sample_bits[alt_i] == sample_bits[alt_i + 1]:
+                    break
+                alt_i += 1
+            raw_len = alt_i - i
+            preamble_len = (
+                raw_len + (raw_len % 2)
+                if raw_len >= 4
+                else 0
+            )
+
+            gap_start = preamble_start + preamble_len
+            gap_end = gap_start
+
+            # Skip zeros
+            while (
+                gap_end < len(sample_bits)
+                and sample_bits[gap_end] == "0"
+            ):
+                gap_end += 1
+
+            # Skip framing/guard bits (PWM protocols)
+            if gap_end < len(sample_bits):
+                scan = gap_end
+                while scan < len(sample_bits):
+                    if sample_bits[scan] != "1":
+                        scan += 1
+                        continue
+                    hi_end = scan
+                    while (
+                        hi_end < len(sample_bits)
+                        and sample_bits[hi_end] == "1"
+                    ):
+                        hi_end += 1
+                    lo_end = hi_end
+                    while (
+                        lo_end < len(sample_bits)
+                        and sample_bits[lo_end] == "0"
+                    ):
+                        lo_end += 1
+                    lo_len = lo_end - hi_end
+                    if lo_len > 2:
+                        gap_end = lo_end
+                        scan = lo_end
+                    else:
+                        gap_end = scan
+                        break
 
         # Find end of meaningful data (strip trailing zeros)
         data_end = _find_data_end(sample_bits)

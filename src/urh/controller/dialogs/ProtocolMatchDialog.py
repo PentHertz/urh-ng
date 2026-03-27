@@ -175,7 +175,8 @@ class ProtocolMatchDialog(QDialog):
                 )
             if match.cipher:
                 lines.append(
-                    f"<b>Cipher:</b> {match.cipher}" f" (available in Crypto Toolkit)"
+                    f"<b>Cipher:</b> {match.cipher}"
+                    f" (available in Crypto Toolkit)"
                 )
 
             lines.append("")

@@ -128,8 +128,10 @@ def main():
     if settings.read("theme_index", 0, int) > 0:
         os.environ["QT_QPA_PLATFORMTHEME"] = "fusion"
 
-    app = QApplication(["URH"] + sys.argv[1:])
+    app = QApplication(["URH-NG"] + sys.argv[1:])
     app.setWindowIcon(QIcon(":/icons/icons/appicon.png"))
+    app.setApplicationName("URH-NG")
+    app.setOrganizationName("PentHertz")
 
     try:
         app.styleHints().setShowShortcutsInContextMenus(True)
@@ -146,10 +148,92 @@ def main():
 
     settings.write("default_theme", app.style().objectName())
 
-    if settings.read("theme_index", 0, int) > 0:
+    theme_index = settings.read("theme_index", 0, int)
+
+    # URH-NG: force dark theme by default (theme_index 0 = dark)
+    # Set theme_index=1 for Fusion light, theme_index=2 for classic dark
+    if theme_index == 0:
+        # URH-NG default: hacker dark theme
+        app.setStyle(QStyleFactory.create("Fusion"))
+        palette = QPalette()
+        bg = QColor(18, 18, 24)
+        bg_alt = QColor(26, 26, 34)
+        bg_input = QColor(22, 22, 30)
+        text = QColor(200, 210, 220)
+        text_dim = QColor(100, 110, 120)
+        accent = QColor(0, 200, 140)       # teal/green accent
+        accent_hover = QColor(0, 230, 160)
+
+        palette.setColor(QPalette.ColorRole.Window, bg)
+        palette.setColor(QPalette.ColorRole.WindowText, text)
+        palette.setColor(QPalette.ColorRole.Base, bg_input)
+        palette.setColor(QPalette.ColorRole.AlternateBase, bg_alt)
+        palette.setColor(QPalette.ColorRole.ToolTipBase, bg_alt)
+        palette.setColor(QPalette.ColorRole.ToolTipText, text)
+        palette.setColor(QPalette.ColorRole.Text, text)
+        palette.setColor(QPalette.ColorRole.Button, bg_alt)
+        palette.setColor(QPalette.ColorRole.ButtonText, text)
+        palette.setColor(QPalette.ColorRole.BrightText, accent_hover)
+        palette.setColor(QPalette.ColorRole.Link, accent)
+        palette.setColor(QPalette.ColorRole.Highlight, accent)
+        palette.setColor(QPalette.ColorRole.HighlightedText, QColor(0, 0, 0))
+        palette.setColor(QPalette.ColorRole.PlaceholderText, text_dim)
+        palette.setColor(
+            QPalette.ColorGroup.Disabled,
+            QPalette.ColorRole.Text,
+            text_dim,
+        )
+        palette.setColor(
+            QPalette.ColorGroup.Disabled,
+            QPalette.ColorRole.ButtonText,
+            text_dim,
+        )
+        app.setPalette(palette)
+
+        # Global stylesheet for sharper look
+        app.setStyleSheet("""
+            QMainWindow, QDialog { background-color: #121218; }
+            QTabWidget::pane { border: 1px solid #2a2a36; }
+            QTabBar::tab { background: #1a1a22; padding: 6px 14px;
+                           border: 1px solid #2a2a36; color: #c8d2dc; }
+            QTabBar::tab:selected { background: #22222e;
+                                    border-bottom: 2px solid #00c88c; }
+            QHeaderView::section { background: #1a1a22; color: #c8d2dc;
+                                   border: 1px solid #2a2a36; padding: 4px; }
+            QTableView { gridline-color: #2a2a36; }
+            QScrollBar { background: #121218; }
+            QScrollBar::handle { background: #2a2a36; border-radius: 4px; }
+            QScrollBar::handle:hover { background: #3a3a46; }
+            QMenuBar { background: #121218; color: #c8d2dc; }
+            QMenuBar::item:selected { background: #00c88c; color: #000; }
+            QMenu { background: #1a1a22; color: #c8d2dc; border: 1px solid #2a2a36; }
+            QMenu::item:selected { background: #00c88c; color: #000; }
+            QToolTip { background: #1a1a22; color: #c8d2dc;
+                       border: 1px solid #00c88c; padding: 4px; }
+            QGroupBox { border: 1px solid #2a2a36; margin-top: 8px;
+                        padding-top: 8px; color: #c8d2dc; }
+            QGroupBox::title { color: #00c88c; }
+            QStatusBar { background: #0e0e14; color: #688; }
+            QPushButton { background: #1a1a22; color: #c8d2dc;
+                          border: 1px solid #2a2a36; padding: 5px 12px;
+                          border-radius: 3px; }
+            QPushButton:hover { border-color: #00c88c; }
+            QPushButton:pressed { background: #00c88c; color: #000; }
+            QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
+                background: #16161e; color: #c8d2dc;
+                border: 1px solid #2a2a36; padding: 3px;
+                selection-background-color: #00c88c;
+            }
+            QProgressBar { background: #16161e; border: 1px solid #2a2a36; }
+            QProgressBar::chunk { background: #00c88c; }
+            QSplitter::handle { background: #2a2a36; }
+            QSplitter::handle:hover { background: #00c88c; }
+        """)
+
+    elif theme_index > 0:
         app.setStyle(QStyleFactory.create("Fusion"))
 
-        if settings.read("theme_index", 0, int) == 2:
+        if theme_index == 2:
             palette = QPalette()
             background_color = QColor(56, 60, 74)
             text_color = QColor(211, 218, 227).lighter()
@@ -160,10 +244,8 @@ def main():
             palette.setColor(QPalette.ColorRole.ToolTipBase, background_color)
             palette.setColor(QPalette.ColorRole.ToolTipText, text_color)
             palette.setColor(QPalette.ColorRole.Text, text_color)
-
             palette.setColor(QPalette.ColorRole.Button, background_color)
             palette.setColor(QPalette.ColorRole.ButtonText, text_color)
-
             palette.setColor(QPalette.ColorRole.BrightText, Qt.GlobalColor.red)
             palette.setColor(
                 QPalette.ColorGroup.Disabled,
@@ -175,7 +257,6 @@ def main():
                 QPalette.ColorRole.ButtonText,
                 Qt.GlobalColor.darkGray,
             )
-
             palette.setColor(QPalette.ColorRole.Highlight, QColor(200, 50, 0))
             palette.setColor(QPalette.ColorRole.HighlightedText, text_color)
             app.setPalette(palette)
@@ -198,7 +279,7 @@ def main():
         # Ensure we get the app icon in windows taskbar
         import ctypes
 
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("jopohl.urh")
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("penthertz.urh-ng")
 
     if settings.read("MainController/geometry", type=bytes):
         main_window.show()

@@ -443,7 +443,7 @@ class Ui_MainWindow(object):
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "Universal Radio Hacker"))
+        MainWindow.setWindowTitle(_translate("MainWindow", "URH-NG // Universal Radio Hacker - Next Gen"))
         self.lnEdtTreeFilter.setPlaceholderText(_translate("MainWindow", "Filter"))
         self.btnFileTreeGoUp.setText(_translate("MainWindow", "..."))
         self.tabWidget_Project.setTabText(
@@ -500,7 +500,7 @@ class Ui_MainWindow(object):
         )
         self.actionDocumentation.setText(_translate("MainWindow", "&Documentation"))
         self.actionAbout_AutomaticHacker.setText(
-            _translate("MainWindow", "&About Universal Radio Hacker...")
+            _translate("MainWindow", "&About URH-NG...")
         )
         self.actionOpenSignal.setText(_translate("MainWindow", "&Signal"))
         self.actionOpenProtocol.setText(_translate("MainWindow", "&Protocol"))

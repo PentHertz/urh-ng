@@ -18,6 +18,7 @@ _sample_rate = 40e6
 _center_freq = 433.92e6
 _ref_level = -30.0
 _decimation = 1
+_bandwidth = 0  # 0 = auto (80% of sample rate)
 
 # Constants from bb_api.h
 BB_STREAMING = 4
@@ -137,8 +138,19 @@ def set_sample_rate(sample_rate):
     dec = max(BB_MIN_DECIMATION, min(BB_MAX_DECIMATION, dec))
     _decimation = dec
     _sample_rate = base_rate / dec
-    bw = _sample_rate * 0.8  # 80% of sample rate
+    # Use current bandwidth, or default to 80% of sample rate
+    bw = _bandwidth if 0 < _bandwidth <= _sample_rate else _sample_rate * 0.8
     return _lib.bbConfigureIQ(_handle, ctypes.c_int(dec), ctypes.c_double(bw))
+
+
+def set_bandwidth(bandwidth):
+    """Set IQ bandwidth filter. Must be <= sample rate."""
+    global _bandwidth
+    if not _is_open:
+        return -1
+    _bandwidth = float(bandwidth)
+    bw = min(_bandwidth, _sample_rate)
+    return _lib.bbConfigureIQ(_handle, ctypes.c_int(_decimation), ctypes.c_double(bw))
 
 
 def set_ref_level(ref_level_dbm):

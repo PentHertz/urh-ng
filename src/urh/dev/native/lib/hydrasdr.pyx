@@ -91,8 +91,55 @@ cpdef int set_if_rx_gain(uint8_t vga_gain):
     """
     return chydrasdr.hydrasdr_set_vga_gain(_c_device, vga_gain)
 
+cpdef array.array get_bandwidths():
+    """Query available hardware bandwidths."""
+    cdef uint32_t count = 0
+    result = chydrasdr.hydrasdr_get_bandwidths(_c_device, &count, 0)
+    if result != chydrasdr.hydrasdr_error.HYDRASDR_SUCCESS:
+        return array.array('I', [])
+
+    cdef array.array bws = array.array('I', [0]*count)
+    result = chydrasdr.hydrasdr_get_bandwidths(_c_device, &bws.data.as_uints[0], count)
+
+    if result == chydrasdr.hydrasdr_error.HYDRASDR_SUCCESS:
+        return bws
+    else:
+        return array.array('I', [])
+
 cpdef int set_bandwidth(uint32_t bandwidth):
-    return chydrasdr.hydrasdr_set_bandwidth(_c_device, bandwidth)
+    """
+    Set bandwidth. If the exact value is not supported, pick the
+    closest available hardware bandwidth.
+    """
+    # First try the exact value
+    cdef int ret = chydrasdr.hydrasdr_set_bandwidth(_c_device, bandwidth)
+    if ret == chydrasdr.hydrasdr_error.HYDRASDR_SUCCESS:
+        return ret
+
+    # Exact value failed — query available bandwidths and pick closest
+    cdef uint32_t count = 0
+    chydrasdr.hydrasdr_get_bandwidths(_c_device, &count, 0)
+    if count == 0:
+        # No bandwidths available — device manages BW internally
+        logger.info(f"HydraSDR: bandwidth {bandwidth} not settable, using device default")
+        return 0
+
+    cdef array.array bws = array.array('I', [0]*count)
+    chydrasdr.hydrasdr_get_bandwidths(_c_device, &bws.data.as_uints[0], count)
+
+    # Find closest
+    cdef uint32_t best = bws[0]
+    cdef uint32_t best_diff = abs(<int>(bandwidth - best))
+    for i in range(1, count):
+        diff = abs(<int>(bandwidth - bws[i]))
+        if diff < best_diff:
+            best = bws[i]
+            best_diff = diff
+
+    if best != bandwidth:
+        logger.info(f"HydraSDR: bandwidth {bandwidth} -> {best} (closest available)")
+
+    return chydrasdr.hydrasdr_set_bandwidth(_c_device, best)
 
 cpdef int set_sample_type_iq():
     return chydrasdr.hydrasdr_set_sample_type(_c_device, chydrasdr.hydrasdr_sample_type.HYDRASDR_SAMPLE_FLOAT32_IQ)

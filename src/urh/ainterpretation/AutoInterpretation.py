@@ -149,62 +149,145 @@ def merge_message_segments_for_ook(segments: list):
 
 
 def detect_modulation(data: np.ndarray, wavelet_scale=4, median_filter_order=11) -> str:
+    """
+    Detect modulation type from complex IQ samples.
+
+    Uses the same multi-feature approach proven in the live spectrum
+    analyzer, adapted for recorded signal analysis:
+
+    1. Amplitude analysis: OOK/ASK have varying amplitude, FSK/PSK constant
+    2. FFT multi-peak: FSK has 2+ spectral peaks (most reliable FSK indicator)
+    3. Instantaneous frequency histogram: FSK shows 2+ distinct frequency levels
+    4. Phase second-derivative: PSK has sharp discontinuities, FSK has smooth ramps
+    5. Constellation shape: FSK/PSK don't pass through origin, OOK does
+
+    Returns: "OOK", "ASK", "FSK", or "PSK"
+    """
     n_data = len(data)
-    data = data[np.abs(data) > 0]
-    if len(data) == 0:
+    if n_data < 4:
         return None
 
-    if n_data - len(data) > 3:
-        return "OOK"
-
-    data = data / np.abs(np.max(data))
-    mag_wavlt = np.abs(Wavelet.cwt_haar(data, scale=wavelet_scale))
-    if len(mag_wavlt) == 0:
+    # ── Step 1: Amplitude analysis ─────────────────────────
+    magnitudes = np.abs(data)
+    max_mag = np.max(magnitudes)
+    if max_mag < 1e-10:
         return None
 
-    norm_mag_wavlt = np.abs(Wavelet.cwt_haar(data / np.abs(data), scale=wavelet_scale))
+    mag_norm = magnitudes / max_mag
 
-    var_mag = np.var(mag_wavlt)
-    var_norm_mag = np.var(norm_mag_wavlt)
+    # Zero ratio: fraction of samples near zero amplitude
+    zero_ratio = np.sum(mag_norm < 0.1) / n_data
 
-    var_filtered_mag = np.var(
-        c_auto_interpretation.median_filter(mag_wavlt, k=median_filter_order)
-    )
-    var_filtered_norm_mag = np.var(
-        c_auto_interpretation.median_filter(norm_mag_wavlt, k=median_filter_order)
-    )
-
-    if all(
-        v < 0.15
-        for v in (var_mag, var_norm_mag, var_filtered_mag, var_filtered_norm_mag)
-    ):
+    # OOK: signal clearly goes on/off
+    if zero_ratio > 0.15:
         return "OOK"
 
-    if var_mag > 1.5 * var_norm_mag:
-        # ASK or QAM
-        # todo: consider qam, compare filtered mag and filtered norm mag
-        return "ASK"
-    else:
-        # FSK or PSK
-        if var_mag > 10 * var_filtered_mag:
-            return "PSK"
-        else:
-            # Now we either have a FSK signal or we a have OOK single pulse
-            # If we have an FSK, there should be at least two peaks in FFT
-            fft = np.fft.fft(data[0 : 2 ** int(np.log2(len(data)))])
-            fft = np.abs(np.fft.fftshift(fft))
-            ten_greatest_indices = np.argsort(fft)[::-1][0:10]
-            greatest_index = ten_greatest_indices[0]
-            min_distance = 10
-            min_freq = 100  # 100 seems to be magnitude of noise frequency
+    # Amplitude coefficient of variation
+    amp_mean = np.mean(mag_norm)
+    amp_cv = np.std(mag_norm) / amp_mean if amp_mean > 0 else 0
 
-            if any(
-                abs(i - greatest_index) >= min_distance and fft[i] >= min_freq
-                for i in ten_greatest_indices
-            ):
-                return "FSK"
+    # ── Step 2: FFT multi-peak (best FSK indicator) ────────
+    fft_len = 2 ** int(np.log2(max(n_data, 16)))
+    fft_mag = np.abs(np.fft.fftshift(np.fft.fft(data[:fft_len])))
+    fft_db = 20 * np.log10(np.where(fft_mag > 0, fft_mag, 1e-20))
+    fft_max_db = np.max(fft_db)
+
+    # Peaks within 30dB of max, separated by >= 2% of FFT width
+    peak_thr = fft_max_db - 30
+    min_peak_dist = max(fft_len // 50, 2)
+    fft_peaks = []
+    for i in range(1, len(fft_db) - 1):
+        if (
+            fft_db[i] > fft_db[i - 1]
+            and fft_db[i] > fft_db[i + 1]
+            and fft_db[i] > peak_thr
+        ):
+            if all(abs(i - p) >= min_peak_dist for p in fft_peaks):
+                fft_peaks.append(i)
+    n_fft_peaks = len(fft_peaks)
+
+    # ── Step 3: Instantaneous frequency histogram ──────────
+    phase_diff = np.diff(np.unwrap(np.angle(data)))
+    freq_peaks = 0
+    if len(phase_diff) > 4:
+        pd_std = np.std(phase_diff)
+        if pd_std > 1e-6:
+            n_bins = min(64, max(8, n_data // 50))
+            hist, _ = np.histogram(phase_diff, bins=n_bins)
+            kernel = np.array([1, 2, 3, 2, 1], dtype=float)
+            kernel /= kernel.sum()
+            if len(hist) > len(kernel):
+                hist_smooth = np.convolve(hist, kernel, mode="same")
             else:
-                return "OOK"
+                hist_smooth = hist.astype(float)
+
+            peak_threshold = np.max(hist_smooth) * 0.12
+            for i in range(1, len(hist_smooth) - 1):
+                if (
+                    hist_smooth[i] > hist_smooth[i - 1]
+                    and hist_smooth[i] > hist_smooth[i + 1]
+                    and hist_smooth[i] > peak_threshold
+                ):
+                    freq_peaks += 1
+
+    # ── Step 4: Phase second-derivative (PSK vs FSK) ───────
+    # FSK: smooth phase ramp → |diff²(phase)| ≈ 0
+    # PSK: sharp phase jump → |diff²(phase)| spikes > 1.5
+    psk_jump_ratio = 0
+    if len(phase_diff) > 4:
+        phase_diff2 = np.diff(phase_diff)
+        n_sharp = np.sum(np.abs(phase_diff2) > 1.5)
+        psk_jump_ratio = n_sharp / max(len(phase_diff2), 1)
+
+    # ── Step 5: Constellation shape ────────────────────────
+    # OOK/ASK pass through origin; FSK/PSK don't
+    passes_origin = np.sum(mag_norm < 0.15) / n_data
+
+    # ── Classification ─────────────────────────────────────
+
+    # High amplitude variation → ASK or OOK
+    if amp_cv > 0.25:
+        if np.sum(mag_norm < 0.3) > n_data * 0.10:
+            return "OOK"
+        return "ASK"
+
+    # Constant envelope → FSK or PSK
+
+    # FSK: two or more spectral peaks OR two frequency histogram levels
+    if n_fft_peaks >= 2 or freq_peaks >= 2:
+        return "FSK"
+
+    # PSK: sharp phase discontinuities (second-derivative spikes)
+    # but NO FSK features
+    if psk_jump_ratio > 0.02:
+        return "PSK"
+
+    # ── Fallback: wavelet method for edge cases ────────────
+    try:
+        data_norm = data / max_mag
+        mag_wavlt = np.abs(Wavelet.cwt_haar(data_norm, scale=wavelet_scale))
+        if len(mag_wavlt) > 0:
+            norm_mag_wavlt = np.abs(
+                Wavelet.cwt_haar(
+                    data_norm / np.abs(data_norm), scale=wavelet_scale
+                )
+            )
+            var_mag = np.var(mag_wavlt)
+            var_norm_mag = np.var(norm_mag_wavlt)
+            var_filtered_mag = np.var(
+                c_auto_interpretation.median_filter(
+                    mag_wavlt, k=median_filter_order
+                )
+            )
+
+            if var_mag > 1.5 * var_norm_mag:
+                return "ASK"
+            if var_mag > 10 * var_filtered_mag:
+                return "PSK"
+    except Exception:
+        pass
+
+    return "OOK"
 
 
 def detect_modulation_for_messages(signal: IQArray, message_indices: list) -> str:
