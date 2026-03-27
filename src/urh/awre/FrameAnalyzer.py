@@ -166,11 +166,13 @@ def analyze_frame(raw_bits: str) -> List[FrameSegment]:
 
             # For Manchester encoding, ensure even data length so the
             # last pair is complete.  A trailing "10" (decoded 0) loses
-            # its final '0' to zero-stripping; keep one extra zero.
+            # its final '0' to zero-stripping or packet boundary truncation.
             if data_encoding == "manchester" and trail_start % 2 != 0:
-                if trail_start < len(data_raw):
+                # Try to recover one more bit from the original raw signal
+                abs_end = pos + trail_start
+                if abs_end < len(raw_bits):
                     trail_start += 1
-                    data_portion = data_raw[:trail_start]
+                    data_portion = raw_bits[pos : pos + trail_start]
 
             # Decode data
             if data_encoding == "manchester":

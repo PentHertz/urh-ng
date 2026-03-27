@@ -175,6 +175,7 @@ setup(
     zip_safe=False,
     entry_points={
         "console_scripts": [
+            "urh-ng = urh.main:main",
             "urh = urh.main:main",
             "urh_cli = urh.cli.urh_cli:main",
         ]
