@@ -222,9 +222,7 @@ class ProtocolMatcher:
         # Update features with stripped lengths for base scoring
         stripped_lens = [len(bs) for bs in raw_bits]
         if stripped_lens:
-            features["median_length"] = int(
-                np.median(stripped_lens)
-            )
+            features["median_length"] = int(np.median(stripped_lens))
         # Use FrameAnalyzer to detect encoding and decode data
         from urh.awre.FrameAnalyzer import (
             analyze_frame,
@@ -238,9 +236,7 @@ class ProtocolMatcher:
             segments = analyze_frame(bs)
             summary = get_frame_summary(segments)
             data = get_decoded_data(segments)
-            frame_analyses.append(
-                (segments, summary, data)
-            )
+            frame_analyses.append((segments, summary, data))
 
         # Build decoded_cache: for each message, the
         # FrameAnalyzer already detected the best encoding
@@ -257,12 +253,8 @@ class ProtocolMatcher:
         fa_encoding = "nrz"
         fa_decoded_len = 0
         if frame_analyses:
-            fa_encoding = frame_analyses[0][1].get(
-                "data_encoding", "nrz"
-            )
-            fa_decoded_len = frame_analyses[0][1].get(
-                "data_bits_decoded", 0
-            )
+            fa_encoding = frame_analyses[0][1].get("data_encoding", "nrz")
+            fa_decoded_len = frame_analyses[0][1].get("data_bits_decoded", 0)
 
         # Store FrameAnalyzer results in features for base scoring
         features["fa_encoding"] = fa_encoding
@@ -275,26 +267,15 @@ class ProtocolMatcher:
             try:
                 results = []
                 for bs in raw_bits[:5]:
-                    inpt = array.array(
-                        "B", [int(b) for b in bs]
-                    )
-                    decoded, errors, state = dec.code(
-                        True, inpt
-                    )
-                    decoded_str = "".join(
-                        str(b) for b in decoded
-                    )
+                    inpt = array.array("B", [int(b) for b in bs])
+                    decoded, errors, state = dec.code(True, inpt)
+                    decoded_str = "".join(str(b) for b in decoded)
                     ds = _find_data_start(decoded_str)
                     data_only = decoded_str[ds:]
-                    results.append(
-                        (data_only, errors, state, ds)
-                    )
+                    results.append((data_only, errors, state, ds))
                 decoded_cache[dec.name] = results
             except Exception as e:
-                logger.debug(
-                    "ProtocolMatcher: decoder "
-                    f"{dec.name} failed: {e}"
-                )
+                logger.debug("ProtocolMatcher: decoder " f"{dec.name} failed: {e}")
 
         # Build modulation compatibility map:
         # FrameAnalyzer detected encoding → compatible protocol modulations
@@ -303,9 +284,7 @@ class ProtocolMatcher:
             "manchester": {"MANCHESTER", "DMC"},
             "nrz": {"PCM", "NRZ", "NRZS", "RZ"},
         }
-        fa_compat_mods = _ENCODING_TO_MODULATIONS.get(
-            fa_encoding, set()
-        )
+        fa_compat_mods = _ENCODING_TO_MODULATIONS.get(fa_encoding, set())
 
         scored = []
         for proto in PROTOCOL_DATABASE:
@@ -329,15 +308,13 @@ class ProtocolMatcher:
                     # Modulation mismatch: the signal uses PWM but
                     # this protocol expects Manchester (or vice versa)
                     base_score *= 0.5
-                    details["mod_mismatch"] = (
-                        f"detected={fa_encoding}, proto={modulation}"
-                    )
+                    details[
+                        "mod_mismatch"
+                    ] = f"detected={fa_encoding}, proto={modulation}"
                     mod_compatible = False
 
             # Get candidate decoders for this modulation type
-            candidate_names = list(
-                self.MODULATION_DECODERS.get(modulation, [])
-            )
+            candidate_names = list(self.MODULATION_DECODERS.get(modulation, []))
             if "Non Return To Zero (NRZ)" not in candidate_names:
                 candidate_names.append("Non Return To Zero (NRZ)")
             # Always try FrameAnalyzer (auto-detected encoding)
@@ -353,15 +330,12 @@ class ProtocolMatcher:
             for dec in self.available_decodings:
                 if dec.name not in candidate_names:
                     if not any(
-                        cn in dec.name or dec.name in cn
-                        for cn in candidate_names
+                        cn in dec.name or dec.name in cn for cn in candidate_names
                     ):
                         continue
                 if dec.name not in decoded_cache:
                     continue
-                all_candidates.append(
-                    (dec.name, decoded_cache[dec.name])
-                )
+                all_candidates.append((dec.name, decoded_cache[dec.name]))
 
             for dec_name, dec_results in all_candidates:
                 if not dec_results:
@@ -431,8 +405,12 @@ class ProtocolMatcher:
                                 # Use the auto-detected encoding from FrameAnalyzer
                                 # Map to the corresponding URH decoder
                                 if frame_analyses:
-                                    fa_enc = frame_analyses[0][1].get("data_encoding", "nrz")
-                                    best_decoder = self._find_decoder_for_encoding(fa_enc)
+                                    fa_enc = frame_analyses[0][1].get(
+                                        "data_encoding", "nrz"
+                                    )
+                                    best_decoder = self._find_decoder_for_encoding(
+                                        fa_enc
+                                    )
                                 else:
                                     best_decoder = None
                             else:
@@ -442,9 +420,7 @@ class ProtocolMatcher:
                                 f"vs proto={proto_len}, errors={avg_errors:.0f}"
                             )
 
-            final_score = min(
-                base_score + best_decode_bonus, 1.0
-            )
+            final_score = min(base_score + best_decode_bonus, 1.0)
             if best_decode_info:
                 details["decoder_match"] = best_decode_info
 
@@ -462,9 +438,7 @@ class ProtocolMatcher:
                         if dbits:
                             stripped = dbits.rstrip("0")
                             if stripped:
-                                best_data_len = max(
-                                    best_data_len, len(stripped)
-                                )
+                                best_data_len = max(best_data_len, len(stripped))
 
                 if best_data_len > 0:
                     # Leftover = non-zero bits beyond expected proto length
@@ -482,35 +456,25 @@ class ProtocolMatcher:
                         # expects → likely wrong protocol
                         penalty = min(leftover / (proto_len * 2), 0.15)
                         final_score = max(final_score - penalty, 0.0)
-                        details["coverage"] = (
-                            f"-{penalty:.0%} ({leftover}b unlabeled)"
-                        )
+                        details["coverage"] = f"-{penalty:.0%} ({leftover}b unlabeled)"
 
             # Bonus for protocols with known bitstream layouts
             for lkey in self.KNOWN_LAYOUTS:
                 if lkey in proto_name:
-                    final_score = min(
-                        final_score + 0.05, 1.0
-                    )
+                    final_score = min(final_score + 0.05, 1.0)
                     details["known_layout"] = lkey
                     break
 
             # Bonus for protocols with crypto toolkit support
             for ckey in self.PROTOCOL_CIPHERS:
                 if ckey in proto_name:
-                    final_score = min(
-                        final_score + 0.05, 1.0
-                    )
-                    details["cipher_support"] = (
-                        self.PROTOCOL_CIPHERS[ckey]
-                    )
+                    final_score = min(final_score + 0.05, 1.0)
+                    details["cipher_support"] = self.PROTOCOL_CIPHERS[ckey]
                     break
 
             if final_score >= self.MIN_SCORE_THRESHOLD:
                 if best_decoder is None:
-                    best_decoder = self._find_best_decoder(
-                        proto, features
-                    )
+                    best_decoder = self._find_best_decoder(proto, features)
                 cipher = ""
                 for key, cval in self.PROTOCOL_CIPHERS.items():
                     if key in proto_name:
@@ -522,9 +486,7 @@ class ProtocolMatcher:
                     final_score,
                     details,
                     recommended_decoder=best_decoder,
-                    leading_zeros_count=features.get(
-                        "leading_zeros", 0
-                    ),
+                    leading_zeros_count=features.get("leading_zeros", 0),
                     cipher=cipher,
                 )
                 scored.append(match)
@@ -733,7 +695,7 @@ class ProtocolMatcher:
         man_len = 0
         i = 0
         while i + 3 < len(common):
-            chunk = common[i: i + 4]
+            chunk = common[i : i + 4]
             if chunk in ("1001", "0110"):
                 man_len = i + 4
                 i += 4
@@ -756,7 +718,7 @@ class ProtocolMatcher:
             if pat in ("100", "110"):
                 j = 0
                 while j + 2 < len(common):
-                    if common[j: j + 3] == pat:
+                    if common[j : j + 3] == pat:
                         j += 3
                     else:
                         break
@@ -778,7 +740,7 @@ class ProtocolMatcher:
                     period = n + m
                     hdr_len = period
                     while hdr_len + period <= len(common):
-                        cycle = common[hdr_len: hdr_len + period]
+                        cycle = common[hdr_len : hdr_len + period]
                         if cycle.count("1") >= n - 1 and cycle.count("0") >= m - 1:
                             hdr_len += period
                         else:
@@ -786,8 +748,11 @@ class ProtocolMatcher:
 
         # Pick longest valid preamble
         candidates = [
-            (alt_len, 4), (man_len, 8), (const_len, 8),
-            (pwm_len, 6), (hdr_len, 6),
+            (alt_len, 4),
+            (man_len, 8),
+            (const_len, 8),
+            (pwm_len, 6),
+            (hdr_len, 6),
         ]
         best_len = 0
         for clen, min_req in candidates:
@@ -1380,17 +1345,13 @@ class ProtocolMatcher:
             i += 1
         leading_zeros = i
 
-        if (
-            preamble_info
-            and preamble_info["raw_pattern"]
-            == "manchester_preamble"
-        ):
+        if preamble_info and preamble_info["raw_pattern"] == "manchester_preamble":
             # Manchester preamble: repeating 1001 or 0110 pattern
             # Skip the repeating pattern
             preamble_start = i
             pat_len = 0
             while i + 3 < len(sample_bits):
-                chunk = sample_bits[i: i + 4]
+                chunk = sample_bits[i : i + 4]
                 if chunk in ("1001", "0110"):
                     pat_len += 4
                     i += 4
@@ -1402,17 +1363,13 @@ class ProtocolMatcher:
             gap_start = preamble_start + preamble_len
             gap_end = gap_start
             while gap_end + 1 < len(sample_bits):
-                pair = sample_bits[gap_end: gap_end + 2]
+                pair = sample_bits[gap_end : gap_end + 2]
                 if pair in ("00", "11"):
                     gap_end += 2
                 else:
                     break
 
-        elif (
-            preamble_info
-            and preamble_info["raw_pattern"]
-            == "constant_high"
-        ):
+        elif preamble_info and preamble_info["raw_pattern"] == "constant_high":
             # Constant 1s preamble (e.g., Fiat 0xFFFF)
             preamble_start = i
             while i < len(sample_bits) and sample_bits[i] == "1":
@@ -1420,10 +1377,7 @@ class ProtocolMatcher:
             preamble_len = i - preamble_start
             gap_start = i
             gap_end = i
-            while (
-                gap_end < len(sample_bits)
-                and sample_bits[gap_end] == "0"
-            ):
+            while gap_end < len(sample_bits) and sample_bits[gap_end] == "0":
                 gap_end += 1
 
         else:
@@ -1435,20 +1389,13 @@ class ProtocolMatcher:
                     break
                 alt_i += 1
             raw_len = alt_i - i
-            preamble_len = (
-                raw_len + (raw_len % 2)
-                if raw_len >= 4
-                else 0
-            )
+            preamble_len = raw_len + (raw_len % 2) if raw_len >= 4 else 0
 
             gap_start = preamble_start + preamble_len
             gap_end = gap_start
 
             # Skip zeros
-            while (
-                gap_end < len(sample_bits)
-                and sample_bits[gap_end] == "0"
-            ):
+            while gap_end < len(sample_bits) and sample_bits[gap_end] == "0":
                 gap_end += 1
 
             # Skip framing/guard bits (PWM protocols)
@@ -1459,16 +1406,10 @@ class ProtocolMatcher:
                         scan += 1
                         continue
                     hi_end = scan
-                    while (
-                        hi_end < len(sample_bits)
-                        and sample_bits[hi_end] == "1"
-                    ):
+                    while hi_end < len(sample_bits) and sample_bits[hi_end] == "1":
                         hi_end += 1
                     lo_end = hi_end
-                    while (
-                        lo_end < len(sample_bits)
-                        and sample_bits[lo_end] == "0"
-                    ):
+                    while lo_end < len(sample_bits) and sample_bits[lo_end] == "0":
                         lo_end += 1
                     lo_len = lo_end - hi_end
                     if lo_len > 2:

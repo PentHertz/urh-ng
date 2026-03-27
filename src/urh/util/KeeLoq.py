@@ -30,11 +30,7 @@ def _bit(x, n):
 def _g5(x, a, b, c, d, e):
     """5-bit index into NLF lookup table."""
     return (
-        _bit(x, a)
-        + _bit(x, b) * 2
-        + _bit(x, c) * 4
-        + _bit(x, d) * 8
-        + _bit(x, e) * 16
+        _bit(x, a) + _bit(x, b) * 2 + _bit(x, c) * 4 + _bit(x, d) * 8 + _bit(x, e) * 16
     )
 
 
@@ -54,10 +50,7 @@ def encrypt(data, key):
     for r in range(KEELOQ_ROUNDS):
         nlf_idx = _g5(x, 1, 9, 20, 26, 31)
         feedback = (
-            _bit(x, 0)
-            ^ _bit(x, 16)
-            ^ _bit(key, r & 63)
-            ^ _bit(KEELOQ_NLF, nlf_idx)
+            _bit(x, 0) ^ _bit(x, 16) ^ _bit(key, r & 63) ^ _bit(KEELOQ_NLF, nlf_idx)
         )
         x = (x >> 1) | (feedback << 31)
     return x & 0xFFFFFFFF
@@ -152,9 +145,7 @@ def faac_learning(seed, manufacturer_key):
     hs = seed >> 16
     ending = 0x544D
     lsb = (hs << 16) | ending
-    return (encrypt(seed, manufacturer_key) << 32) | encrypt(
-        lsb, manufacturer_key
-    )
+    return (encrypt(seed, manufacturer_key) << 32) | encrypt(lsb, manufacturer_key)
 
 
 def magic_serial_type1_learning(serial, man_key):
@@ -260,18 +251,14 @@ def encode_packet(
     disc &= 0x3FF
 
     # Build plaintext: Button(4) + OVR(2) + DISC(10) + Counter(16)
-    plaintext = (
-        (button << 28) | (ovr << 26) | (disc << 16) | counter
-    )
+    plaintext = (button << 28) | (ovr << 26) | (disc << 16) | counter
 
     # Get device key
     if key_type == "manufacturer":
         if learning_mode == "normal":
             device_key = normal_learning(serial_28bit, key)
         elif learning_mode == "secure":
-            device_key = secure_learning(
-                serial_28bit, 0, key
-            )
+            device_key = secure_learning(serial_28bit, 0, key)
         elif learning_mode == "magic_xor":
             device_key = magic_xor_learning(serial_28bit, key)
         elif learning_mode == "faac":
@@ -298,10 +285,7 @@ def encode_packet(
     battery = "0"
     repeat = "0"
 
-    packet_bits = (
-        enc_bits_lsb + ser_bits_lsb + btn_bits_lsb
-        + battery + repeat
-    )
+    packet_bits = enc_bits_lsb + ser_bits_lsb + btn_bits_lsb + battery + repeat
 
     # Fixed part: button(4 bits) + serial(28 bits)
     fixed_part = (button << 28) | serial_28bit
@@ -342,21 +326,13 @@ def decode_packet(
     if learning_mode == "simple":
         device_key = manufacturer_key
     elif learning_mode == "normal":
-        device_key = normal_learning(
-            serial_28bit, manufacturer_key
-        )
+        device_key = normal_learning(serial_28bit, manufacturer_key)
     elif learning_mode == "secure":
-        device_key = secure_learning(
-            serial_28bit, encrypted_32bit, manufacturer_key
-        )
+        device_key = secure_learning(serial_28bit, encrypted_32bit, manufacturer_key)
     elif learning_mode == "magic_xor":
-        device_key = magic_xor_learning(
-            serial_28bit, manufacturer_key
-        )
+        device_key = magic_xor_learning(serial_28bit, manufacturer_key)
     elif learning_mode == "faac":
-        device_key = faac_learning(
-            encrypted_32bit, manufacturer_key
-        )
+        device_key = faac_learning(encrypted_32bit, manufacturer_key)
     else:
         device_key = manufacturer_key
 
@@ -429,9 +405,7 @@ def bruteforce_manufacturer_key(
 
     keys_tried = 0
     for key in key_range:
-        result = decode_packet(
-            encrypted_32bit, serial_28bit, key, learning_mode
-        )
+        result = decode_packet(encrypted_32bit, serial_28bit, key, learning_mode)
         keys_tried += 1
 
         # Check the selected field
@@ -543,6 +517,7 @@ MANUFACTURER_CODES = {
     "MC150": ("Normstahl", "RCU"),
     "MC200": ("StarLine", "Car Alarm"),
 }
+
 
 def lookup_manufacturer(serial_28bit):
     """
