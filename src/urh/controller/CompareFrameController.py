@@ -133,7 +133,9 @@ class CompareFrameController(QWidget):
         self.crypto_toolkit_action = self.analyze_menu.addAction(
             self.tr("Crypto Toolkit (KeeLoq, TEA, AES...)")
         )
-        self.crypto_toolkit_action.triggered.connect(self.on_keeloq_decoder_triggered)
+        self.crypto_toolkit_action.triggered.connect(
+            self.on_keeloq_decoder_triggered
+        )
         self.ui.btnAnalyze.setMenu(self.analyze_menu)
 
         self.ui.lblShownRows.hide()
@@ -1406,27 +1408,16 @@ class CompareFrameController(QWidget):
 
         # For zero-key / known-key protocols: show auto-decode result
         _AUTOCRACK_CIPHERS = {
-            "Ford-GF2-CRC",
-            "Mitsubishi-XOR",
-            "Somfy-XOR",
-            "Came-Atomo",
-            "Came-Twee",
-            "Mazda-Siemens",
-            "Phoenix-V2",
-            "SecurityPlus",
-            "KIA-V5-Mixer",
-            "KIA-V6-AES",
-            "Porsche-Cayenne",
-            "Subaru-XOR",
-            "PSA-TEA",
-            "VAG",
-            "KIA-V3-V4",
+            "Ford-GF2-CRC", "Mitsubishi-XOR", "Somfy-XOR",
+            "Came-Atomo", "Came-Twee", "Mazda-Siemens",
+            "Phoenix-V2", "SecurityPlus", "KIA-V5-Mixer",
+            "KIA-V6-AES", "Porsche-Cayenne", "Subaru-XOR",
+            "PSA-TEA", "VAG", "KIA-V3-V4",
         }
         if cipher_hint in _AUTOCRACK_CIPHERS and self.proto_analyzer.messages:
             # Build a mock match to reuse _auto_decode_crypto
             class _M:
                 pass
-
             mock = _M()
             mock.cipher = cipher_hint
             mock.name = cipher_hint
@@ -1444,7 +1435,10 @@ class CompareFrameController(QWidget):
         # Extract encrypted + serial from selected message labels
         if self.proto_analyzer.messages:
             msg = None
-            sel = self.ui.tblViewProtocol.selectionModel().selectedRows()
+            sel = (
+                self.ui.tblViewProtocol.selectionModel()
+                .selectedRows()
+            )
             if sel:
                 row = sel[0].row()
                 if row < len(self.proto_analyzer.messages):
@@ -1452,7 +1446,9 @@ class CompareFrameController(QWidget):
             if msg is None:
                 msg = self.proto_analyzer.messages[0]
 
-            bits = msg.decoded_bits_str or msg.plain_bits_str
+            bits = (
+                msg.decoded_bits_str or msg.plain_bits_str
+            )
             for label in msg.message_type:
                 name = label.name.lower()
                 start = label.start
@@ -1460,9 +1456,16 @@ class CompareFrameController(QWidget):
                 field_bits = bits[start:end]
                 if not field_bits:
                     continue
-                if "encrypted" in name and len(field_bits) >= 32:
-                    encrypted = int(field_bits[:32][::-1], 2)
-                elif "id" in name and len(field_bits) >= 16:
+                if (
+                    "encrypted" in name
+                    and len(field_bits) >= 32
+                ):
+                    encrypted = int(
+                        field_bits[:32][::-1], 2
+                    )
+                elif (
+                    "id" in name and len(field_bits) >= 16
+                ):
                     serial = int(field_bits[::-1], 2)
 
         dialog = KeeLoqDialog(
@@ -1537,7 +1540,9 @@ class CompareFrameController(QWidget):
         from urh.awre.ProtocolMatcher import ProtocolMatcher
 
         # Store cipher hint so Crypto Toolkit auto-selects it
-        self._last_cipher_hint = getattr(match, "cipher", "")
+        self._last_cipher_hint = getattr(
+            match, "cipher", ""
+        )
 
         applied_parts = []
 
@@ -1641,7 +1646,7 @@ class CompareFrameController(QWidget):
             def bits_to_bytes(s, n):
                 result = []
                 for i in range(0, min(n, len(s)), 8):
-                    result.append(int(s[i : i + 8].ljust(8, "0"), 2))
+                    result.append(int(s[i: i + 8].ljust(8, "0"), 2))
                 return result
 
             name = match.name
@@ -1651,7 +1656,6 @@ class CompareFrameController(QWidget):
 
             if cipher == "Ford-GF2-CRC":
                 from urh.util.CryptoToolkit import ford_v0_decode_bits
-
                 if len(fa_data) < 80:
                     return f"\n\nFord V0: need 80 decoded bits, got {len(fa_data)}"
                 r = ford_v0_decode_bits(fa_data)
@@ -1666,7 +1670,6 @@ class CompareFrameController(QWidget):
 
             elif cipher == "Mitsubishi-XOR":
                 from urh.util.CryptoToolkit import mitsubishi_v0_decode
-
                 raw_bytes = bits_to_bytes(bits_str, 96)
                 if len(raw_bytes) >= 10:
                     r = mitsubishi_v0_decode(raw_bytes)
@@ -1680,7 +1683,6 @@ class CompareFrameController(QWidget):
 
             elif cipher == "Somfy-XOR":
                 from urh.util.CryptoToolkit import somfy_decode
-
                 val = bits_to_int(bits_str, 56)
                 if val:
                     r = somfy_decode(val)
@@ -1694,7 +1696,6 @@ class CompareFrameController(QWidget):
 
             elif cipher == "Came-Atomo":
                 from urh.util.CryptoToolkit import came_atomo_decrypt
-
                 val = bits_to_int(bits_str, 62)
                 if val:
                     r = came_atomo_decrypt(val)
@@ -1707,7 +1708,6 @@ class CompareFrameController(QWidget):
 
             elif cipher == "Came-Twee":
                 from urh.util.CryptoToolkit import came_twee_decrypt
-
                 val = bits_to_int(bits_str, 54)
                 if val:
                     r = came_twee_decrypt(val)
@@ -1720,12 +1720,7 @@ class CompareFrameController(QWidget):
 
             elif cipher == "Mazda-Siemens":
                 from urh.util.CryptoToolkit import mazda_siemens_decrypt
-
-                val = (
-                    bits_to_int(fa_data, 64)
-                    if len(fa_data) >= 64
-                    else bits_to_int(bits_str, 64)
-                )
+                val = bits_to_int(fa_data, 64) if len(fa_data) >= 64 else bits_to_int(bits_str, 64)
                 if val:
                     r = mazda_siemens_decrypt(val)
                     lines = [
@@ -1738,7 +1733,6 @@ class CompareFrameController(QWidget):
 
             elif cipher == "Phoenix-V2":
                 from urh.util.CryptoToolkit import phoenix_v2_decrypt
-
                 val = bits_to_int(bits_str, 52)
                 if val:
                     r = phoenix_v2_decrypt(val)
@@ -1751,7 +1745,6 @@ class CompareFrameController(QWidget):
 
             elif cipher == "SecurityPlus":
                 from urh.util.CryptoToolkit import secplus_v2_decode
-
                 val = bits_to_int(bits_str, 62)
                 if val:
                     r = secplus_v2_decode(val)
@@ -1766,7 +1759,6 @@ class CompareFrameController(QWidget):
 
             elif cipher == "KIA-V3-V4":
                 from urh.util.CryptoToolkit import kia_v3_v4_decrypt
-
                 # Extract serial (28-bit) and encrypted (32-bit) from labels
                 serial, encrypted = self._extract_serial_and_hop(msg)
                 if serial and encrypted:
@@ -1787,7 +1779,6 @@ class CompareFrameController(QWidget):
 
             elif cipher == "KIA-V5-Mixer":
                 from urh.util.CryptoToolkit import kia_v5_mixer_decrypt
-
                 # KIA V5: 64-bit data = btn(4) + serial(28) + encrypted(32)
                 val = bits_to_int(bits_str, 64)
                 if val:
@@ -1804,7 +1795,6 @@ class CompareFrameController(QWidget):
 
             elif cipher == "KIA-V6-AES":
                 from urh.util.CryptoToolkit import kia_v6_decrypt
-
                 ct_bytes = bits_to_bytes(bits_str, 128)
                 if len(ct_bytes) >= 16:
                     r = kia_v6_decrypt(ct_bytes)
@@ -1818,7 +1808,6 @@ class CompareFrameController(QWidget):
 
             elif cipher == "Porsche-Cayenne":
                 from urh.util.CryptoToolkit import porsche_cayenne_decrypt
-
                 val = bits_to_int(bits_str, 64)
                 if val:
                     serial = (val >> 32) & 0xFFFFFF
@@ -1833,12 +1822,9 @@ class CompareFrameController(QWidget):
 
             elif cipher == "Subaru-XOR":
                 from urh.util.CryptoToolkit import subaru_decrypt
-
                 data_bytes = bits_to_bytes(bits_str, 64)
                 if len(data_bytes) >= 8:
-                    serial = (
-                        (data_bytes[1] << 16) | (data_bytes[2] << 8) | data_bytes[3]
-                    )
+                    serial = (data_bytes[1] << 16) | (data_bytes[2] << 8) | data_bytes[3]
                     button = data_bytes[0] & 0x0F
                     r = subaru_decrypt(data_bytes[4:8], serial)
                     lines = [
@@ -1850,12 +1836,9 @@ class CompareFrameController(QWidget):
 
             elif cipher == "Scher-Khan":
                 from urh.util.CryptoToolkit import scher_khan_decrypt
-
                 data_bytes = bits_to_bytes(bits_str, 56)
                 if len(data_bytes) >= 7:
-                    serial = (
-                        (data_bytes[0] << 16) | (data_bytes[1] << 8) | data_bytes[2]
-                    )
+                    serial = (data_bytes[0] << 16) | (data_bytes[1] << 8) | data_bytes[2]
                     r = scher_khan_decrypt(data_bytes, serial)
                     lines = [
                         f"--- {name} Decode ---",
@@ -1866,7 +1849,6 @@ class CompareFrameController(QWidget):
 
             elif cipher == "PSA-TEA":
                 from urh.util.CryptoToolkit import psa_bruteforce_0x23
-
                 val = bits_to_int(bits_str, 64)
                 if val:
                     v0 = (val >> 32) & 0xFFFFFFFF
@@ -1909,7 +1891,6 @@ class CompareFrameController(QWidget):
 
             elif cipher == "Alutech-AT4N":
                 from urh.util.CryptoToolkit import alutech_at4n_decrypt
-
                 data_bytes = bits_to_bytes(bits_str, 72)
                 if len(data_bytes) >= 8:
                     r = alutech_at4n_decrypt(data_bytes, 0)
@@ -1922,12 +1903,7 @@ class CompareFrameController(QWidget):
 
             elif cipher == "VAG":
                 from urh.util.CryptoToolkit import vag_decode
-
-                val = (
-                    bits_to_int(fa_data, 80)
-                    if len(fa_data) >= 80
-                    else bits_to_int(bits_str, 80)
-                )
+                val = bits_to_int(fa_data, 80) if len(fa_data) >= 80 else bits_to_int(bits_str, 80)
                 if val:
                     k1 = (val >> 16) & 0xFFFFFFFFFFFFFFFF
                     k2 = val & 0xFFFF
@@ -1945,7 +1921,7 @@ class CompareFrameController(QWidget):
                             f"--- {name} ({r['vehicle_type']}) ---",
                             "Could not decrypt with built-in keys.",
                             "Try Crypto Toolkit with custom AUT64 key.",
-                        ]
+                ]
 
             if not lines:
                 return ""
@@ -1962,7 +1938,7 @@ class CompareFrameController(QWidget):
         bits = msg.decoded_bits_str or msg.plain_bits_str
         for label in msg.message_type:
             name_l = label.name.lower()
-            field_bits = bits[label.start : label.end]
+            field_bits = bits[label.start: label.end]
             if not field_bits:
                 continue
             if "id" in name_l or "serial" in name_l:

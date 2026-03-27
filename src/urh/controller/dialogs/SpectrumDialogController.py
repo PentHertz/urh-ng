@@ -1,25 +1,12 @@
 import numpy as np
 from PyQt6.QtCore import QTimer, pyqtSlot, Qt
 from PyQt6.QtGui import (
-    QWheelEvent,
-    QIcon,
-    QPixmap,
-    QResizeEvent,
-    QPen,
-    QColor,
-    QPainterPath,
-    QBrush,
-    QFont,
+    QWheelEvent, QIcon, QPixmap, QResizeEvent, QPen, QColor,
+    QPainterPath, QBrush, QFont,
 )
 from PyQt6.QtWidgets import (
-    QGraphicsScene,
-    QGraphicsView,
-    QVBoxLayout,
-    QHBoxLayout,
-    QWidget,
-    QLabel,
-    QProgressBar,
-    QFrame,
+    QGraphicsScene, QGraphicsView, QVBoxLayout,
+    QHBoxLayout, QWidget, QLabel, QProgressBar, QFrame,
     QSpinBox,
 )
 
@@ -68,6 +55,7 @@ class SpectrumDialogController(SendRecvDialog):
         self.create_connects()
         self.device_settings_widget.update_for_new_device(overwrite_settings=False)
 
+
     # ── Extra views ──────────────────────────────────────────
 
     def __setup_extras(self):
@@ -82,12 +70,8 @@ class SpectrumDialogController(SendRecvDialog):
         self._time_scene = QGraphicsScene()
         self._time_view.setScene(self._time_scene)
         self._time_view.setMaximumHeight(120)
-        self._time_view.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-        )
-        self._time_view.setVerticalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-        )
+        self._time_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._time_view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         rl.addWidget(self._time_view, 2)
 
         self._const_view = QGraphicsView()
@@ -95,12 +79,8 @@ class SpectrumDialogController(SendRecvDialog):
         self._const_view.setScene(self._const_scene)
         self._const_view.setMaximumHeight(120)
         self._const_view.setFixedWidth(120)
-        self._const_view.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-        )
-        self._const_view.setVerticalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-        )
+        self._const_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._const_view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         rl.addWidget(self._const_view, 0)
 
         layout.addWidget(row)
@@ -119,10 +99,8 @@ class SpectrumDialogController(SendRecvDialog):
 
         self._mod_bars = {}
         for name, color in [
-            ("OOK", "#4CAF50"),
-            ("ASK", "#FF9800"),
-            ("FSK", "#2196F3"),
-            ("PSK", "#9C27B0"),
+            ("OOK", "#4CAF50"), ("ASK", "#FF9800"),
+            ("FSK", "#2196F3"), ("PSK", "#9C27B0"),
         ]:
             lbl = QLabel(name)
             lbl.setFixedWidth(24)
@@ -169,15 +147,15 @@ class SpectrumDialogController(SendRecvDialog):
         spectrogram.data_min = -80
         spectrogram.data_max = 10
         scene = self.ui.graphicsViewSpectrogram.scene()
-        pixmap = QPixmap.fromImage(spectrogram.create_spectrogram_image(transpose=True))
+        pixmap = QPixmap.fromImage(
+            spectrogram.create_spectrogram_image(transpose=True)
+        )
         item = scene.addPixmap(pixmap)
         item.moveBy(0, self.spectrogram_y_pos)
         self.spectrogram_y_pos += pixmap.height()
         if self.spectrogram_y_pos >= scene.sceneRect().height():
             scene.setSceneRect(
-                0,
-                0,
-                Spectrogram.DEFAULT_FFT_WINDOW_SIZE,
+                0, 0, Spectrogram.DEFAULT_FFT_WINDOW_SIZE,
                 self.spectrogram_y_pos,
             )
             self.ui.graphicsViewSpectrogram.ensureVisible(item)
@@ -205,10 +183,7 @@ class SpectrumDialogController(SendRecvDialog):
                     p.lineTo(j * sx, mid - float(data[j]) * sy)
                 self._time_scene.addPath(p, QPen(col, 1))
             self._time_scene.addLine(
-                0,
-                mid,
-                w,
-                mid,
+                0, mid, w, mid,
                 QPen(QColor(80, 80, 80), 0.5, Qt.PenStyle.DashLine),
             )
             self._time_scene.setSceneRect(0, 0, w, h)
@@ -239,15 +214,10 @@ class SpectrumDialogController(SendRecvDialog):
                 self._const_scene.addEllipse(
                     cx + float(i_d[j]) * sc - 1,
                     cy - float(q_d[j]) * sc - 1,
-                    2,
-                    2,
-                    pn,
-                    br,
+                    2, 2, pn, br,
                 )
             self._const_scene.setSceneRect(0, 0, sz, sz)
-            self._const_view.fitInView(
-                0, 0, sz, sz, Qt.AspectRatioMode.IgnoreAspectRatio
-            )
+            self._const_view.fitInView(0, 0, sz, sz, Qt.AspectRatioMode.IgnoreAspectRatio)
         except Exception:
             pass
 
@@ -349,7 +319,10 @@ class SpectrumDialogController(SendRecvDialog):
             psk = 0
             # PSK only if NO FSK features and sharp phase discontinuities
             if amp_cv < 0.30 and nfp < 2 and fp < 2 and fsk < 20:
-                psk = min(100, int(psk_score_raw * 600 + max(0, 0.15 - amp_cv) * 50))
+                psk = min(100, int(
+                    psk_score_raw * 600
+                    + max(0, 0.15 - amp_cv) * 50
+                ))
 
             tot = ook + ask + fsk + psk
             if tot > 0:
@@ -363,12 +336,7 @@ class SpectrumDialogController(SendRecvDialog):
             sc = {"OOK": ook, "ASK": ask, "FSK": fsk, "PSK": psk}
             dom = max(sc, key=sc.get)
             self._mod_label.setText(dom)
-            cl = {
-                "OOK": "#4CAF50",
-                "ASK": "#FF9800",
-                "FSK": "#2196F3",
-                "PSK": "#9C27B0",
-            }
+            cl = {"OOK": "#4CAF50", "ASK": "#FF9800", "FSK": "#2196F3", "PSK": "#9C27B0"}
             self._mod_label.setStyleSheet(f"color:{cl[dom]};")
         except Exception:
             pass
@@ -423,13 +391,9 @@ class SpectrumDialogController(SendRecvDialog):
                     elif isinstance(filled, np.ndarray) and np.iscomplexobj(filled):
                         iq = np.array(filled, dtype=np.complex64)
                     elif isinstance(filled, np.ndarray) and filled.ndim == 2:
-                        iq = filled[:, 0].astype(np.float32) + 1j * filled[:, 1].astype(
-                            np.float32
-                        )
+                        iq = filled[:, 0].astype(np.float32) + 1j * filled[:, 1].astype(np.float32)
                     elif isinstance(filled, np.ndarray):
-                        iq = filled[0::2].astype(np.float32) + 1j * filled[1::2].astype(
-                            np.float32
-                        )
+                        iq = filled[0::2].astype(np.float32) + 1j * filled[1::2].astype(np.float32)
 
                     # Limit to last 2048 samples for performance
                     if len(iq) > 2048:

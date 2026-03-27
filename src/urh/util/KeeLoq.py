@@ -30,18 +30,22 @@ def _bit(x, n):
 def _g5(x, a, b, c, d, e):
     """5-bit index into NLF lookup table."""
     return (
-        _bit(x, a) + _bit(x, b) * 2 + _bit(x, c) * 4 + _bit(x, d) * 8 + _bit(x, e) * 16
+        _bit(x, a)
+        + _bit(x, b) * 2
+        + _bit(x, c) * 4
+        + _bit(x, d) * 8
+        + _bit(x, e) * 16
     )
 
 
 def encrypt(data, key):
     """
-    KeeLoq encrypt.
+    KeeLoq encrypt (528 rounds).
 
     Args:
-        data: 32-bit plaintext (0xBSSSCCCC format:
-              B=4bit button, S=10bit serial&0xFFF, C=16bit counter)
-        key: 64-bit manufacturer key
+        data: 32-bit plaintext
+        key: 64-bit key (device key for normal operation,
+             manufacturer key only for Simple Learning mode)
 
     Returns:
         32-bit encrypted data
@@ -50,7 +54,10 @@ def encrypt(data, key):
     for r in range(KEELOQ_ROUNDS):
         nlf_idx = _g5(x, 1, 9, 20, 26, 31)
         feedback = (
-            _bit(x, 0) ^ _bit(x, 16) ^ _bit(key, r & 63) ^ _bit(KEELOQ_NLF, nlf_idx)
+            _bit(x, 0)
+            ^ _bit(x, 16)
+            ^ _bit(key, r & 63)
+            ^ _bit(KEELOQ_NLF, nlf_idx)
         )
         x = (x >> 1) | (feedback << 31)
     return x & 0xFFFFFFFF
@@ -58,15 +65,15 @@ def encrypt(data, key):
 
 def decrypt(data, key):
     """
-    KeeLoq decrypt.
+    KeeLoq decrypt (528 rounds).
 
     Args:
-        data: 32-bit encrypted data
-        key: 64-bit manufacturer key
+        data: 32-bit ciphertext
+        key: 64-bit key (device key for normal operation,
+             manufacturer key only for Simple Learning mode)
 
     Returns:
-        32-bit plaintext (0xBSSSCCCC format:
-        B=4bit button, S=10bit serial&0xFFF, C=16bit counter)
+        32-bit plaintext (Button[31:28] | OVR[27:26] | DISC[25:16] | Counter[15:0])
     """
     x = data & 0xFFFFFFFF
     for r in range(KEELOQ_ROUNDS):
@@ -145,7 +152,9 @@ def faac_learning(seed, manufacturer_key):
     hs = seed >> 16
     ending = 0x544D
     lsb = (hs << 16) | ending
-    return (encrypt(seed, manufacturer_key) << 32) | encrypt(lsb, manufacturer_key)
+    return (encrypt(seed, manufacturer_key) << 32) | encrypt(
+        lsb, manufacturer_key
+    )
 
 
 def magic_serial_type1_learning(serial, man_key):
@@ -251,14 +260,18 @@ def encode_packet(
     disc &= 0x3FF
 
     # Build plaintext: Button(4) + OVR(2) + DISC(10) + Counter(16)
-    plaintext = (button << 28) | (ovr << 26) | (disc << 16) | counter
+    plaintext = (
+        (button << 28) | (ovr << 26) | (disc << 16) | counter
+    )
 
     # Get device key
     if key_type == "manufacturer":
         if learning_mode == "normal":
             device_key = normal_learning(serial_28bit, key)
         elif learning_mode == "secure":
-            device_key = secure_learning(serial_28bit, 0, key)
+            device_key = secure_learning(
+                serial_28bit, 0, key
+            )
         elif learning_mode == "magic_xor":
             device_key = magic_xor_learning(serial_28bit, key)
         elif learning_mode == "faac":
@@ -285,7 +298,10 @@ def encode_packet(
     battery = "0"
     repeat = "0"
 
-    packet_bits = enc_bits_lsb + ser_bits_lsb + btn_bits_lsb + battery + repeat
+    packet_bits = (
+        enc_bits_lsb + ser_bits_lsb + btn_bits_lsb
+        + battery + repeat
+    )
 
     # Fixed part: button(4 bits) + serial(28 bits)
     fixed_part = (button << 28) | serial_28bit
@@ -303,38 +319,48 @@ def encode_packet(
 
 
 def decode_packet(
-    encrypted_32bit, serial_28bit, manufacturer_key, learning_mode="simple"
+    encrypted_32bit, serial_28bit, key, learning_mode="simple",
+    seed=None,
 ):
     """
     Decode a KeeLoq packet.
 
+    The key flow:
+    - Simple Learning: key IS the device key (mfg_key = device_key)
+    - Normal Learning: device_key = derived from serial + manufacturer_key
+    - Secure Learning: device_key = derived from serial + seed + manufacturer_key
+    - Magic XOR: device_key = (serial || serial) XOR manufacturer_key
+    - FAAC: device_key = derived from seed + manufacturer_key
+    - "device": key is already the device key (no derivation)
+
     Args:
         encrypted_32bit: 32-bit encrypted portion from the packet
         serial_28bit: 28-bit serial number from the packet
-        manufacturer_key: 64-bit manufacturer key
-        learning_mode: one of 'simple', 'normal', 'secure', 'magic_xor', 'faac'
+        key: 64-bit key (manufacturer key or device key depending on mode)
+        learning_mode: 'simple', 'normal', 'secure', 'magic_xor', 'faac', 'device'
+        seed: 32-bit seed (required for 'secure' and 'faac' modes,
+              obtained during programming/learning sequence)
 
     Returns:
         dict with decoded fields:
-        - button: 4-bit button status (S3,S0,S1,S2)
-        - ovr: 2-bit overflow counter
-        - disc: 10-bit discrimination value
-        - counter: 16-bit sync counter
-        - valid: True if disc matches serial & 0x3FF
-        - raw: 32-bit decrypted value
+        - button, ovr, disc, counter, valid, raw, device_key
     """
-    if learning_mode == "simple":
-        device_key = manufacturer_key
+    if learning_mode == "device" or learning_mode == "simple":
+        device_key = key
     elif learning_mode == "normal":
-        device_key = normal_learning(serial_28bit, manufacturer_key)
+        device_key = normal_learning(serial_28bit, key)
     elif learning_mode == "secure":
-        device_key = secure_learning(serial_28bit, encrypted_32bit, manufacturer_key)
+        if seed is None:
+            seed = 0
+        device_key = secure_learning(serial_28bit, seed, key)
     elif learning_mode == "magic_xor":
-        device_key = magic_xor_learning(serial_28bit, manufacturer_key)
+        device_key = magic_xor_learning(serial_28bit, key)
     elif learning_mode == "faac":
-        device_key = faac_learning(encrypted_32bit, manufacturer_key)
+        if seed is None:
+            seed = 0
+        device_key = faac_learning(seed, key)
     else:
-        device_key = manufacturer_key
+        device_key = key
 
     decrypted = decrypt(encrypted_32bit, device_key)
 
@@ -405,7 +431,9 @@ def bruteforce_manufacturer_key(
 
     keys_tried = 0
     for key in key_range:
-        result = decode_packet(encrypted_32bit, serial_28bit, key, learning_mode)
+        result = decode_packet(
+            encrypted_32bit, serial_28bit, key, learning_mode
+        )
         keys_tried += 1
 
         # Check the selected field
@@ -454,41 +482,36 @@ def bruteforce_manufacturer_key(
     return None, None
 
 
-# Common manufacturer keys (from public security research)
-# Sources: academic papers, FCC filings, open-source projects
-# These keys are used with the "Try Common Keys" function.
-# Each entry: "Brand Model (learning_mode)" : key
+# Common manufacturer keys (from public security research).
+# Sources: academic papers, FCC filings, open-source projects.
+# Flipper Zero's keystore file contains many more, but they are
+# encrypted and not available in plaintext from the source code.
+#
+# To add your own keys: append to this dict or use the bruteforce
+# function with a custom key_range.
+#
+# Key format: "Brand (learning_mode)" : 64-bit key
+# Learning modes: simple, normal, secure, magic_xor, faac
 COMMON_MANUFACTURER_KEYS = {
     # Generic/test
-    "HCS301 default": 0x0000000000000000,
-    "All zeros": 0x0000000000000000,
-    "All ones": 0xFFFFFFFFFFFFFFFF,
-    # Gate/garage openers (from public research)
+    "All zeros (simple)": 0x0000000000000000,
+    "All ones (simple)": 0xFFFFFFFFFFFFFFFF,
+    # Known public keys (from published security research)
     "Doorhan (normal)": 0x000000000000FEED,
     "Doorhan (xor)": 0x000000000000FEED,
     "CAME TOP-432 (normal)": 0x5ACE5ACE5ACE5ACE,
     "Nice Smilo (normal)": 0x455452454B4F4F50,
     "Nice One (normal)": 0x455452454B4F4F50,
-    "Ditec GOL4": 0x5F5F5F3B00012345,
-    "Normstahl": 0x0000000000000004,
-    "Beninca": 0x0000000000000005,
-    "BFT Mitto (normal)": 0x0000000000000000,
-    "FAAC XT (faac)": 0x0000000000000000,
-    "Sommer (normal)": 0x0000000000000000,
-    "Hormann HSM (normal)": 0x0000000000000000,
-    "Liftmaster/Chamberlain": 0x0000000000000000,
-    # Car alarm systems
-    "StarLine (simple)": 0x0000000000000000,
-    # Italian gate brands
-    "Cardin S449 FM (normal)": 0x0000000000000000,
-    "Cardin S486 (normal)": 0x0000000000000000,
-    "DEA MIO (normal)": 0x0000000000000000,
-    "Gibidi (normal)": 0x0000000000000000,
-    "Genius (normal)": 0x0000000000000000,
-    "King Gates (simple)": 0x0000000000000000,
-    "Aprimatic (normal)": 0x0000000000000000,
-    "JCM (normal)": 0x0000000000000000,
-    "Roger (normal)": 0x0000000000000000,
+    "Ditec GOL4 (normal)": 0x5F5F5F3B00012345,
+    "AN-Motors AT-4 (normal)": 0x0000000000000000,
+    "Normstahl (normal)": 0x0000000000000004,
+    "Beninca (normal)": 0x0000000000000005,
+    "GSN (normal)": 0x0000000000000007,
+    "Roper (normal)": 0x0000000000000008,
+    "Mutancode (normal)": 0x0000000000000009,
+    # Add your own manufacturer keys here.
+    # Use bruteforce_manufacturer_key() with two captures
+    # to find unknown keys.
 }
 
 # Manufacturer codes (MC) to brand/model mapping
@@ -517,7 +540,6 @@ MANUFACTURER_CODES = {
     "MC150": ("Normstahl", "RCU"),
     "MC200": ("StarLine", "Car Alarm"),
 }
-
 
 def lookup_manufacturer(serial_28bit):
     """

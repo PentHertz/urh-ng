@@ -161,7 +161,7 @@ def main():
         bg_input = QColor(22, 22, 30)
         text = QColor(200, 210, 220)
         text_dim = QColor(100, 110, 120)
-        accent = QColor(0, 200, 140)  # teal/green accent
+        accent = QColor(0, 200, 140)       # teal/green accent
         accent_hover = QColor(0, 230, 160)
 
         palette.setColor(QPalette.ColorRole.Window, bg)
@@ -191,8 +191,7 @@ def main():
         app.setPalette(palette)
 
         # Global stylesheet for sharper look
-        app.setStyleSheet(
-            """
+        app.setStyleSheet("""
             QMainWindow, QDialog { background-color: #121218; }
             QTabWidget::pane { border: 1px solid #2a2a36; }
             QTabBar::tab { background: #1a1a22; padding: 6px 14px;
@@ -229,8 +228,7 @@ def main():
             QProgressBar::chunk { background: #00c88c; }
             QSplitter::handle { background: #2a2a36; }
             QSplitter::handle:hover { background: #00c88c; }
-        """
-        )
+        """)
 
     elif theme_index > 0:
         app.setStyle(QStyleFactory.create("Fusion"))
@@ -281,9 +279,7 @@ def main():
         # Ensure we get the app icon in windows taskbar
         import ctypes
 
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-            "penthertz.urh-ng"
-        )
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("penthertz.urh-ng")
 
     if settings.read("MainController/geometry", type=bytes):
         main_window.show()

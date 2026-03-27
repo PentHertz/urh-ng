@@ -443,9 +443,7 @@ class Ui_MainWindow(object):
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(
-            _translate("MainWindow", "URH-NG // Universal Radio Hacker - Next Gen")
-        )
+        MainWindow.setWindowTitle(_translate("MainWindow", "URH-NG // Universal Radio Hacker - Next Gen"))
         self.lnEdtTreeFilter.setPlaceholderText(_translate("MainWindow", "Filter"))
         self.btnFileTreeGoUp.setText(_translate("MainWindow", "..."))
         self.tabWidget_Project.setTabText(

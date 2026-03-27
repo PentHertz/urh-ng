@@ -56,13 +56,8 @@ class BruteforceThread(QThread):
     finished_signal = pyqtSignal()
 
     def __init__(
-        self,
-        encrypted,
-        serial,
-        learning_modes,
-        key_start,
-        key_end,
-        encrypted2=None,
+        self, encrypted, serial, learning_modes,
+        key_start, key_end, encrypted2=None,
     ):
         super().__init__()
         self.encrypted = encrypted
@@ -84,24 +79,21 @@ class BruteforceThread(QThread):
                 break
             for mode in self.learning_modes:
                 r1 = decode_packet(
-                    self.encrypted,
-                    self.serial,
-                    key,
-                    mode,
+                    self.encrypted, self.serial, key, mode,
                 )
                 tried += 1
                 if r1["disc"] != expected_disc:
                     continue
                 if self.encrypted2 is not None:
                     r2 = decode_packet(
-                        self.encrypted2,
-                        self.serial,
-                        key,
-                        mode,
+                        self.encrypted2, self.serial,
+                        key, mode,
                     )
                     if r2["disc"] != expected_disc:
                         continue
-                    diff = abs(r2["counter"] - r1["counter"])
+                    diff = abs(
+                        r2["counter"] - r1["counter"]
+                    )
                     if diff == 0 or diff > 100:
                         continue
                 r1["serial_match"] = True
@@ -116,10 +108,7 @@ class KeeLoqDialog(QDialog):
     """KeeLoq decoder and encoder with key bruteforce."""
 
     def __init__(
-        self,
-        parent=None,
-        encrypted=0,
-        serial=0,
+        self, parent=None, encrypted=0, serial=0,
         cipher_hint="",
     ):
         super().__init__(parent)
@@ -136,9 +125,15 @@ class KeeLoqDialog(QDialog):
 
         self._last_decode = None
         self._tabs = QTabWidget()
-        self._tabs.addTab(self._build_decoder_tab(), "KeeLoq Decoder")
-        self._tabs.addTab(self._build_encoder_tab(), "KeeLoq Encoder")
-        self._tabs.addTab(self._build_crypto_tab(), "Crypto Toolkit")
+        self._tabs.addTab(
+            self._build_decoder_tab(), "KeeLoq Decoder"
+        )
+        self._tabs.addTab(
+            self._build_encoder_tab(), "KeeLoq Encoder"
+        )
+        self._tabs.addTab(
+            self._build_crypto_tab(), "Crypto Toolkit"
+        )
         layout.addWidget(self._tabs)
 
         # Shared results
@@ -162,7 +157,9 @@ class KeeLoqDialog(QDialog):
                         break
                 # Pre-fill data from encrypted field
                 if self._encrypted:
-                    self.edit_crypto_data.setText(f"{self._encrypted:08X}")
+                    self.edit_crypto_data.setText(
+                        f"{self._encrypted:08X}"
+                    )
 
     # ── Decoder Tab ──────────────────────────────────
 
@@ -173,13 +170,19 @@ class KeeLoqDialog(QDialog):
         # Packet data
         input_group = QGroupBox("Packet Data (LSB/BE hex)")
         form = QFormLayout(input_group)
-        self.edit_encrypted = QLineEdit(f"{self._encrypted:08X}")
+        self.edit_encrypted = QLineEdit(
+            f"{self._encrypted:08X}"
+        )
         self.edit_encrypted.setPlaceholderText("32-bit (hex)")
         form.addRow("Encrypted #1:", self.edit_encrypted)
         self.edit_encrypted2 = QLineEdit()
-        self.edit_encrypted2.setPlaceholderText("2nd capture for bruteforce (optional)")
+        self.edit_encrypted2.setPlaceholderText(
+            "2nd capture for bruteforce (optional)"
+        )
         form.addRow("Encrypted #2:", self.edit_encrypted2)
-        self.edit_serial = QLineEdit(f"{self._serial:07X}")
+        self.edit_serial = QLineEdit(
+            f"{self._serial:07X}"
+        )
         self.edit_serial.setPlaceholderText("28-bit (hex)")
         form.addRow("Serial/ID:", self.edit_serial)
         layout.addWidget(input_group)
@@ -191,8 +194,12 @@ class KeeLoqDialog(QDialog):
         type_row = QHBoxLayout()
         type_row.addWidget(QLabel("Key type:"))
         self.combo_key_type = QComboBox()
-        self.combo_key_type.addItem("Device Key (direct)", "device")
-        self.combo_key_type.addItem("Manufacturer Key (derive)", "manufacturer")
+        self.combo_key_type.addItem(
+            "Device Key (direct)", "device"
+        )
+        self.combo_key_type.addItem(
+            "Manufacturer Key (derive)", "manufacturer"
+        )
         type_row.addWidget(self.combo_key_type)
         key_layout.addLayout(type_row)
 
@@ -215,8 +222,12 @@ class KeeLoqDialog(QDialog):
         self.combo_preset = QComboBox()
         self.combo_preset.addItem("Known keys...")
         for name, key in COMMON_MANUFACTURER_KEYS.items():
-            self.combo_preset.addItem(f"{name} (0x{key:016X})", key)
-        self.combo_preset.currentIndexChanged.connect(self._on_preset_selected)
+            self.combo_preset.addItem(
+                f"{name} (0x{key:016X})", key
+            )
+        self.combo_preset.currentIndexChanged.connect(
+            self._on_preset_selected
+        )
         preset_row.addWidget(self.combo_preset)
         key_layout.addLayout(preset_row)
 
@@ -228,10 +239,16 @@ class KeeLoqDialog(QDialog):
         self.btn_try_all.clicked.connect(self.on_try_all)
         btn_row.addWidget(self.btn_try_all)
         self.btn_find_mfg = QPushButton("Find Mfg Key")
-        self.btn_find_mfg.clicked.connect(self.on_find_mfg_key)
+        self.btn_find_mfg.clicked.connect(
+            self.on_find_mfg_key
+        )
         btn_row.addWidget(self.btn_find_mfg)
-        self.btn_to_encoder = QPushButton("Copy to Encoder >>>")
-        self.btn_to_encoder.clicked.connect(self.on_copy_to_encoder)
+        self.btn_to_encoder = QPushButton(
+            "Copy to Encoder >>>"
+        )
+        self.btn_to_encoder.clicked.connect(
+            self.on_copy_to_encoder
+        )
         self.btn_to_encoder.setEnabled(False)
         btn_row.addWidget(self.btn_to_encoder)
         key_layout.addLayout(btn_row)
@@ -239,7 +256,9 @@ class KeeLoqDialog(QDialog):
         layout.addWidget(key_group)
 
         # Bruteforce
-        bf_group = QGroupBox("Bruteforce (use 2 captures for reliability)")
+        bf_group = QGroupBox(
+            "Bruteforce (use 2 captures for reliability)"
+        )
         bf_layout = QVBoxLayout(bf_group)
         rr = QHBoxLayout()
         rr.addWidget(QLabel("Range:"))
@@ -274,14 +293,20 @@ class KeeLoqDialog(QDialog):
         layout = QVBoxLayout(tab)
 
         form = QFormLayout()
-        self.edit_enc_serial = QLineEdit(f"{self._serial:07X}")
-        self.edit_enc_serial.setPlaceholderText("28-bit (hex)")
+        self.edit_enc_serial = QLineEdit(
+            f"{self._serial:07X}"
+        )
+        self.edit_enc_serial.setPlaceholderText(
+            "28-bit (hex)"
+        )
         form.addRow("Serial (hex):", self.edit_enc_serial)
 
         self.edit_enc_button = QLineEdit("2")
         self.edit_enc_button.setPlaceholderText("0-15")
         self.edit_enc_button.setMaximumWidth(60)
-        form.addRow("Button (status bits):", self.edit_enc_button)
+        form.addRow(
+            "Button (status bits):", self.edit_enc_button
+        )
 
         self.edit_enc_counter = QLineEdit("1")
         self.edit_enc_counter.setPlaceholderText("0-65535")
@@ -294,7 +319,9 @@ class KeeLoqDialog(QDialog):
         form.addRow("OVR (overflow):", self.edit_enc_ovr)
 
         self.edit_enc_disc = QLineEdit("")
-        self.edit_enc_disc.setPlaceholderText("auto = serial & 0x3FF")
+        self.edit_enc_disc.setPlaceholderText(
+            "auto = serial & 0x3FF"
+        )
         self.edit_enc_disc.setMaximumWidth(80)
         form.addRow("DISC (hex):", self.edit_enc_disc)
 
@@ -306,8 +333,12 @@ class KeeLoqDialog(QDialog):
         kt_row = QHBoxLayout()
         kt_row.addWidget(QLabel("Key type:"))
         self.combo_enc_key_type = QComboBox()
-        self.combo_enc_key_type.addItem("Device Key", "device")
-        self.combo_enc_key_type.addItem("Manufacturer Key", "manufacturer")
+        self.combo_enc_key_type.addItem(
+            "Device Key", "device"
+        )
+        self.combo_enc_key_type.addItem(
+            "Manufacturer Key", "manufacturer"
+        )
         kt_row.addWidget(self.combo_enc_key_type)
         kt_row.addWidget(QLabel("Learning:"))
         self.combo_enc_learning = QComboBox()
@@ -316,7 +347,9 @@ class KeeLoqDialog(QDialog):
         kt_row.addWidget(self.combo_enc_learning)
         layout.addLayout(kt_row)
 
-        self.btn_encode = QPushButton("Encrypt / Generate Packet")
+        self.btn_encode = QPushButton(
+            "Encrypt / Generate Packet"
+        )
         self.btn_encode.clicked.connect(self.on_encode)
         layout.addWidget(self.btn_encode)
 
@@ -334,8 +367,12 @@ class KeeLoqDialog(QDialog):
         cipher_row.addWidget(QLabel("Cipher:"))
         self.combo_cipher = QComboBox()
         for cid, info in CIPHER_INFO.items():
-            self.combo_cipher.addItem(f"{info['name']} — {info['used_by']}", cid)
-        self.combo_cipher.currentIndexChanged.connect(self._on_cipher_changed)
+            self.combo_cipher.addItem(
+                f"{info['name']} — {info['used_by']}", cid
+            )
+        self.combo_cipher.currentIndexChanged.connect(
+            self._on_cipher_changed
+        )
         cipher_row.addWidget(self.combo_cipher)
         layout.addLayout(cipher_row)
 
@@ -359,7 +396,9 @@ class KeeLoqDialog(QDialog):
         form.addRow("Key (hex):", self.edit_crypto_key)
 
         self.edit_crypto_extra = QLineEdit()
-        self.edit_crypto_extra.setPlaceholderText("optional (counter, IV, etc.)")
+        self.edit_crypto_extra.setPlaceholderText(
+            "optional (counter, IV, etc.)"
+        )
         form.addRow("Extra (hex):", self.edit_crypto_extra)
         layout.addLayout(form)
 
@@ -372,7 +411,9 @@ class KeeLoqDialog(QDialog):
             "VAG TEA: 0B46502D 5E253718 2BF93A19 622C1206",
             "0B46502D5E2537182BF93A19622C1206",
         )
-        self.combo_crypto_preset.currentIndexChanged.connect(self._on_crypto_preset)
+        self.combo_crypto_preset.currentIndexChanged.connect(
+            self._on_crypto_preset
+        )
         preset_row.addWidget(self.combo_crypto_preset)
         layout.addLayout(preset_row)
 
@@ -394,7 +435,8 @@ class KeeLoqDialog(QDialog):
         if cid and cid in CIPHER_INFO:
             info = CIPHER_INFO[cid]
             self.lbl_cipher_info.setText(
-                f"Key: {info['key_bits']} bits, " f"Block: {info['block_bits']} bits"
+                f"Key: {info['key_bits']} bits, "
+                f"Block: {info['block_bits']} bits"
             )
 
     def _on_crypto_preset(self, index):
@@ -411,17 +453,25 @@ class KeeLoqDialog(QDialog):
         extra_hex = self.edit_crypto_extra.text().strip()
 
         try:
-            data_bytes = bytes.fromhex(data_hex.replace(" ", ""))
+            data_bytes = bytes.fromhex(
+                data_hex.replace(" ", "")
+            )
         except ValueError:
-            QMessageBox.warning(self, "Error", "Invalid data (hex)")
+            QMessageBox.warning(
+                self, "Error", "Invalid data (hex)"
+            )
             return
 
         key_bytes = b""
         if key_hex:
             try:
-                key_bytes = bytes.fromhex(key_hex.replace(" ", ""))
+                key_bytes = bytes.fromhex(
+                    key_hex.replace(" ", "")
+                )
             except ValueError:
-                QMessageBox.warning(self, "Error", "Invalid key (hex)")
+                QMessageBox.warning(
+                    self, "Error", "Invalid key (hex)"
+                )
                 return
 
         lines = [f"Cipher: {CIPHER_INFO.get(cid, {}).get('name', cid)}"]
@@ -433,11 +483,8 @@ class KeeLoqDialog(QDialog):
 
         try:
             result = self._run_cipher(
-                cid,
-                direction,
-                data_bytes,
-                key_bytes,
-                extra_hex,
+                cid, direction, data_bytes,
+                key_bytes, extra_hex,
             )
             lines.append(f"Result:   {result}")
         except Exception as e:
@@ -445,7 +492,9 @@ class KeeLoqDialog(QDialog):
 
         self.result_text.setPlainText("\n".join(lines))
 
-    def _run_cipher(self, cid, direction, data, key, extra):
+    def _run_cipher(
+        self, cid, direction, data, key, extra
+    ):
         if cid == "TEA":
             if len(data) != 8:
                 raise ValueError("TEA needs 8 bytes data")
@@ -453,7 +502,10 @@ class KeeLoqDialog(QDialog):
                 raise ValueError("TEA needs 16 bytes key")
             v0 = int.from_bytes(data[:4], "big")
             v1 = int.from_bytes(data[4:], "big")
-            k = [int.from_bytes(key[i : i + 4], "big") for i in range(0, 16, 4)]
+            k = [
+                int.from_bytes(key[i:i + 4], "big")
+                for i in range(0, 16, 4)
+            ]
             if direction == "decrypt":
                 r0, r1 = tea_decrypt(v0, v1, k)
             else:
@@ -480,9 +532,13 @@ class KeeLoqDialog(QDialog):
             sbox = list(range(16))
             pbox = list(range(8))
             if direction == "decrypt":
-                r = aut64_decrypt(list(data), list(key), sbox, pbox)
+                r = aut64_decrypt(
+                    list(data), list(key), sbox, pbox
+                )
             else:
-                r = aut64_encrypt(list(data), list(key), sbox, pbox)
+                r = aut64_encrypt(
+                    list(data), list(key), sbox, pbox
+                )
             return bytes(r).hex()
 
         elif cid == "KIA-V5-Mixer":
@@ -491,7 +547,9 @@ class KeeLoqDialog(QDialog):
             if len(key) != 8:
                 raise ValueError("Mixer needs 8 bytes key")
             enc_val = int.from_bytes(data, "big")
-            counter = kia_v5_mixer_decrypt(enc_val, list(key))
+            counter = kia_v5_mixer_decrypt(
+                enc_val, list(key)
+            )
             return f"Counter: {counter} (0x{counter:04X})"
 
         elif cid == "Mitsubishi-XOR":
@@ -501,9 +559,13 @@ class KeeLoqDialog(QDialog):
             if extra:
                 cnt = int(extra, 16)
             if direction == "decrypt":
-                r = mitsubishi_v0_descramble(list(data), cnt)
+                r = mitsubishi_v0_descramble(
+                    list(data), cnt
+                )
             else:
-                r = mitsubishi_v0_scramble(list(data), cnt)
+                r = mitsubishi_v0_scramble(
+                    list(data), cnt
+                )
             return bytes(r).hex()
 
         elif cid == "Ford-GF2-CRC":
@@ -515,9 +577,13 @@ class KeeLoqDialog(QDialog):
 
         elif cid == "KeeLoq":
             if len(data) != 4:
-                raise ValueError("KeeLoq needs 4 bytes data")
+                raise ValueError(
+                    "KeeLoq needs 4 bytes data"
+                )
             if len(key) != 8:
-                raise ValueError("KeeLoq needs 8 bytes key")
+                raise ValueError(
+                    "KeeLoq needs 8 bytes key"
+                )
             from urh.util.KeeLoq import (
                 encrypt as kl_enc,
                 decrypt as kl_dec,
@@ -541,12 +607,20 @@ class KeeLoqDialog(QDialog):
         d = self._last_decode
         if not d:
             return
-        self.edit_enc_serial.setText(f"{d['serial']:07X}")
+        self.edit_enc_serial.setText(
+            f"{d['serial']:07X}"
+        )
         self.edit_enc_button.setText(str(d["button"]))
-        self.edit_enc_counter.setText(str(d["counter"] + 1))
+        self.edit_enc_counter.setText(
+            str(d["counter"] + 1)
+        )
         self.edit_enc_ovr.setText(str(d["ovr"]))
-        self.edit_enc_disc.setText(f"{d['disc']:03X}")
-        self.edit_enc_key.setText(f"{d['device_key']:016X}")
+        self.edit_enc_disc.setText(
+            f"{d['disc']:03X}"
+        )
+        self.edit_enc_key.setText(
+            f"{d['device_key']:016X}"
+        )
         self.combo_enc_key_type.setCurrentIndex(0)
         self._tabs.setCurrentIndex(1)
 
@@ -558,14 +632,22 @@ class KeeLoqDialog(QDialog):
 
     def _parse_packet(self):
         try:
-            enc = int(self.edit_encrypted.text().strip(), 16)
+            enc = int(
+                self.edit_encrypted.text().strip(), 16
+            )
         except ValueError:
-            QMessageBox.warning(self, "Error", "Invalid encrypted (hex)")
+            QMessageBox.warning(
+                self, "Error", "Invalid encrypted (hex)"
+            )
             return None
         try:
-            ser = int(self.edit_serial.text().strip(), 16)
+            ser = int(
+                self.edit_serial.text().strip(), 16
+            )
         except ValueError:
-            QMessageBox.warning(self, "Error", "Invalid serial (hex)")
+            QMessageBox.warning(
+                self, "Error", "Invalid serial (hex)"
+            )
             return None
         return enc, ser
 
@@ -577,7 +659,9 @@ class KeeLoqDialog(QDialog):
         try:
             key = int(self.edit_key.text().strip(), 16)
         except ValueError:
-            QMessageBox.warning(self, "Error", "Invalid key (hex)")
+            QMessageBox.warning(
+                self, "Error", "Invalid key (hex)"
+            )
             return
         key_type = self.combo_key_type.currentData()
         mode = self.combo_learning.currentData()
@@ -591,18 +675,17 @@ class KeeLoqDialog(QDialog):
                 "counter": decrypted & 0xFFFF,
                 "raw": decrypted,
                 "device_key": key,
-                "valid": ((decrypted >> 16) & 0x3FF) == (ser & 0x3FF),
+                "valid": ((decrypted >> 16) & 0x3FF)
+                == (ser & 0x3FF),
             }
-            self._show_full_result(enc, ser, "device", result)
+            self._show_full_result(
+                enc, ser, "device", result
+            )
         else:
             result = decode_packet(enc, ser, key, mode)
             self._show_full_result(
-                enc,
-                ser,
-                "manufacturer",
-                result,
-                mfg_key=key,
-                mode=mode,
+                enc, ser, "manufacturer", result,
+                mfg_key=key, mode=mode,
             )
 
     def on_find_mfg_key(self):
@@ -611,11 +694,12 @@ class KeeLoqDialog(QDialog):
             return
         _, ser = pkt
         try:
-            dev_key = int(self.edit_key.text().strip(), 16)
+            dev_key = int(
+                self.edit_key.text().strip(), 16
+            )
         except ValueError:
             QMessageBox.warning(
-                self,
-                "Error",
+                self, "Error",
                 "Enter device key in the Key field",
             )
             return
@@ -640,15 +724,21 @@ class KeeLoqDialog(QDialog):
                     derived = mode_fn(ser, mfg)
                 if derived == dev_key:
                     lines.append(f"  FOUND: {name}")
-                    lines.append(f"  Mfg Key: 0x{mfg:016X}")
+                    lines.append(
+                        f"  Mfg Key: 0x{mfg:016X}"
+                    )
                     lines.append(f"  Mode: {mode_name}")
-                    self.result_text.setPlainText("\n".join(lines))
+                    self.result_text.setPlainText(
+                        "\n".join(lines)
+                    )
                     return
             lines.append("  No match")
 
         lines.append("")
         lines.append("Not found in common keys.")
-        lines.append("Use Device Key mode to decrypt directly.")
+        lines.append(
+            "Use Device Key mode to decrypt directly."
+        )
         self.result_text.setPlainText("\n".join(lines))
 
     def on_try_all(self):
@@ -657,18 +747,30 @@ class KeeLoqDialog(QDialog):
             return
         enc, ser = pkt
 
-        lines = ["Trying all common keys x all modes...\n"]
+        lines = [
+            "Trying all common keys x all modes...\n"
+        ]
         found = False
         for name, key in COMMON_MANUFACTURER_KEYS.items():
             for mid, mname in LEARNING_MODES.items():
-                result = decode_packet(enc, ser, key, mid)
+                result = decode_packet(
+                    enc, ser, key, mid
+                )
                 if result["valid"]:
                     found = True
-                    lines.append(f"MATCH: {name} + {mname}")
-                    lines.append(f"  Mfg: 0x{key:016X}")
-                    lines.append(f"  Dev: " f"0x{result['device_key']:016X}")
                     lines.append(
-                        f"  Btn={result['button']}" f" Cnt={result['counter']}"
+                        f"MATCH: {name} + {mname}"
+                    )
+                    lines.append(
+                        f"  Mfg: 0x{key:016X}"
+                    )
+                    lines.append(
+                        f"  Dev: "
+                        f"0x{result['device_key']:016X}"
+                    )
+                    lines.append(
+                        f"  Btn={result['button']}"
+                        f" Cnt={result['counter']}"
                     )
                     lines.append("")
         if not found:
@@ -686,14 +788,17 @@ class KeeLoqDialog(QDialog):
             try:
                 enc2 = int(t, 16)
             except ValueError:
-                QMessageBox.warning(self, "Error", "Invalid Encrypted #2")
+                QMessageBox.warning(
+                    self, "Error", "Invalid Encrypted #2"
+                )
                 return
         else:
             r = QMessageBox.question(
-                self,
-                "Single capture",
-                "No 2nd capture. Results may have " "false positives.\nContinue?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                self, "Single capture",
+                "No 2nd capture. Results may have "
+                "false positives.\nContinue?",
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.No,
             )
             if r != QMessageBox.StandardButton.Yes:
                 return
@@ -701,10 +806,14 @@ class KeeLoqDialog(QDialog):
             start = int(self.edit_start.text().strip(), 16)
             end = int(self.edit_end.text().strip(), 16)
         except ValueError:
-            QMessageBox.warning(self, "Error", "Invalid range")
+            QMessageBox.warning(
+                self, "Error", "Invalid range"
+            )
             return
         if end <= start:
-            QMessageBox.warning(self, "Error", "End > start required")
+            QMessageBox.warning(
+                self, "Error", "End > start required"
+            )
             return
 
         modes = list(LEARNING_MODES.keys())
@@ -716,16 +825,17 @@ class KeeLoqDialog(QDialog):
         self.btn_stop.setEnabled(True)
 
         self._bruteforce_thread = BruteforceThread(
-            enc,
-            ser,
-            modes,
-            start,
-            end,
-            enc2,
+            enc, ser, modes, start, end, enc2,
         )
-        self._bruteforce_thread.progress.connect(self._on_bf_progress)
-        self._bruteforce_thread.found.connect(self._on_bf_found)
-        self._bruteforce_thread.finished_signal.connect(self._on_bf_done)
+        self._bruteforce_thread.progress.connect(
+            self._on_bf_progress
+        )
+        self._bruteforce_thread.found.connect(
+            self._on_bf_found
+        )
+        self._bruteforce_thread.finished_signal.connect(
+            self._on_bf_done
+        )
         self._bruteforce_thread.start()
 
     def on_stop(self):
@@ -734,7 +844,9 @@ class KeeLoqDialog(QDialog):
 
     def _on_bf_progress(self, tried, key_str):
         self.progress.setValue(tried)
-        self.progress.setFormat(f"{tried:,} tried... {key_str}")
+        self.progress.setFormat(
+            f"{tried:,} tried... {key_str}"
+        )
 
     def _on_bf_found(self, key, result, mode):
         self.progress.setFormat("KEY FOUND!")
@@ -744,12 +856,8 @@ class KeeLoqDialog(QDialog):
         pkt = self._parse_packet()
         enc, ser = pkt
         self._show_full_result(
-            enc,
-            ser,
-            "manufacturer",
-            result,
-            mfg_key=key,
-            mode=mode,
+            enc, ser, "manufacturer", result,
+            mfg_key=key, mode=mode,
         )
         self.edit_key.setText(f"{key:016X}")
 
@@ -761,13 +869,25 @@ class KeeLoqDialog(QDialog):
 
     def on_encode(self):
         try:
-            ser = int(self.edit_enc_serial.text().strip(), 16)
-            btn = int(self.edit_enc_button.text().strip())
-            cnt = int(self.edit_enc_counter.text().strip())
-            ovr = int(self.edit_enc_ovr.text().strip())
-            key = int(self.edit_enc_key.text().strip(), 16)
+            ser = int(
+                self.edit_enc_serial.text().strip(), 16
+            )
+            btn = int(
+                self.edit_enc_button.text().strip()
+            )
+            cnt = int(
+                self.edit_enc_counter.text().strip()
+            )
+            ovr = int(
+                self.edit_enc_ovr.text().strip()
+            )
+            key = int(
+                self.edit_enc_key.text().strip(), 16
+            )
         except ValueError:
-            QMessageBox.warning(self, "Error", "Invalid parameters")
+            QMessageBox.warning(
+                self, "Error", "Invalid parameters"
+            )
             return
 
         # DISC: if empty, use serial & 0x3FF
@@ -776,7 +896,9 @@ class KeeLoqDialog(QDialog):
             try:
                 disc = int(disc_text, 16)
             except ValueError:
-                QMessageBox.warning(self, "Error", "Invalid DISC (hex)")
+                QMessageBox.warning(
+                    self, "Error", "Invalid DISC (hex)"
+                )
                 return
         else:
             disc = None  # encode_packet defaults to serial & 0x3FF
@@ -785,10 +907,7 @@ class KeeLoqDialog(QDialog):
         mode = self.combo_enc_learning.currentData()
 
         result = encode_packet(
-            ser,
-            btn,
-            cnt,
-            key,
+            ser, btn, cnt, key,
             key_type=key_type,
             learning_mode=mode,
             ovr=ovr,
@@ -807,42 +926,45 @@ class KeeLoqDialog(QDialog):
             "=== Encoded KeeLoq Packet ===",
             "",
             f"Serial:       0x{result['serial']:07X}",
-            f"Button:       {result['button']}" f" (bits {result['button']:04b})",
-            f"Counter:      {result['counter']}" f" (0x{result['counter']:04X})",
+            f"Button:       {result['button']}"
+            f" (bits {result['button']:04b})",
+            f"Counter:      {result['counter']}"
+            f" (0x{result['counter']:04X})",
             "",
         ]
         if key_type == "manufacturer":
             lines.append(f"Mfg Key:      0x{key:016X}")
-            lines.append(f"Learning:     " f"{LEARNING_MODES.get(mode, mode)}")
-        lines.extend(
-            [
-                f"Device Key:   " f"0x{result['device_key']:016X}",
-                "",
-                f"PlainText:    " f"0x{result['plaintext']:08X}",
-                f"CipherText:   " f"0x{result['encrypted']:08X}",
-                f"Fixed Part:   " f"0x{result['fixed_part']:010X}",
-                "",
-                f"Packet (66 bits LSB):",
-                f"  {result['packet_bits']}",
-                "",
-                f"PWM raw ({len(raw_bits)} bits):",
-                f"  {raw_bits}",
-                "",
-                "Paste PWM raw bits into URH Generator to" " transmit.",
-            ]
-        )
+            lines.append(
+                f"Learning:     "
+                f"{LEARNING_MODES.get(mode, mode)}"
+            )
+        lines.extend([
+            f"Device Key:   "
+            f"0x{result['device_key']:016X}",
+            "",
+            f"PlainText:    "
+            f"0x{result['plaintext']:08X}",
+            f"CipherText:   "
+            f"0x{result['encrypted']:08X}",
+            f"Fixed Part:   "
+            f"0x{result['fixed_part']:010X}",
+            "",
+            f"Packet (66 bits LSB):",
+            f"  {result['packet_bits']}",
+            "",
+            f"PWM raw ({len(raw_bits)} bits):",
+            f"  {raw_bits}",
+            "",
+            "Paste PWM raw bits into URH Generator to"
+            " transmit.",
+        ])
         self.result_text.setPlainText("\n".join(lines))
 
     # ── Output ───────────────────────────────────────
 
     def _show_full_result(
-        self,
-        encrypted,
-        serial,
-        key_type,
-        result,
-        mfg_key=None,
-        mode=None,
+        self, encrypted, serial, key_type, result,
+        mfg_key=None, mode=None,
     ):
         button = result["button"]
         ovr = result.get("ovr", 0)
@@ -866,7 +988,10 @@ class KeeLoqDialog(QDialog):
         lines = []
         if key_type == "manufacturer" and mfg_key is not None:
             lines.append(f"Mfg Key:      0x{mfg_key:016X}")
-            lines.append(f"Learning:     " f"{LEARNING_MODES.get(mode, mode)}")
+            lines.append(
+                f"Learning:     "
+                f"{LEARNING_MODES.get(mode, mode)}"
+            )
         lines.append(f"Device Key:   0x{device_key:016X}")
         lines.append("")
         lines.append(f"CipherText:   0x{encrypted:08X}")
@@ -878,7 +1003,9 @@ class KeeLoqDialog(QDialog):
         lines.append(f"Fixed Part:   0x{fixed:010X}")
         lines.append("")
         lines.append(f"PlainText:    0x{decrypted:08X}")
-        lines.append(f"Counter:      {counter} (0x{counter:04X})")
+        lines.append(
+            f"Counter:      {counter} (0x{counter:04X})"
+        )
 
         # Button: raw status and remapped
         btn_remap = (
@@ -894,7 +1021,8 @@ class KeeLoqDialog(QDialog):
         )
         lines.append(f"OVR:          {ovr}")
         lines.append(
-            f"DISC:         0x{disc:03X}" f" {'(VALID)' if valid else '(MISMATCH)'}"
+            f"DISC:         0x{disc:03X}"
+            f" {'(VALID)' if valid else '(MISMATCH)'}"
         )
         lines.append("")
         lines.append("Cipher:       KeeLoq")

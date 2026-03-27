@@ -68,11 +68,15 @@ def analyze_frame(raw_bits: str) -> List[FrameSegment]:
         while zero_len < len(raw_bits) and raw_bits[zero_len] == "0":
             zero_len += 1
         if zero_len >= 4:
-            segments.append(FrameSegment(0, zero_len, "nrz", "padding"))
+            segments.append(
+                FrameSegment(0, zero_len, "nrz", "padding")
+            )
             pos = zero_len
 
     # Step 3: Detect preamble type and boundaries
-    preamble_end, preamble_type = _detect_preamble(raw_bits, pos)
+    preamble_end, preamble_type = _detect_preamble(
+        raw_bits, pos
+    )
 
     has_preamble = preamble_end > pos
 
@@ -98,8 +102,12 @@ def analyze_frame(raw_bits: str) -> List[FrameSegment]:
                 # Found a preamble further in the signal.
                 # Everything before it is a partial/previous packet.
                 if gap_start > pos:
-                    segments.append(FrameSegment(pos, gap_start, "nrz", "padding"))
-                segments.append(FrameSegment(gap_start, scan_pos, "nrz", "padding"))
+                    segments.append(
+                        FrameSegment(pos, gap_start, "nrz", "padding")
+                    )
+                segments.append(
+                    FrameSegment(gap_start, scan_pos, "nrz", "padding")
+                )
                 pos = scan_pos
                 preamble_end, preamble_type = pe, pt
                 has_preamble = True
@@ -116,11 +124,8 @@ def analyze_frame(raw_bits: str) -> List[FrameSegment]:
             dec = preamble_raw
         segments.append(
             FrameSegment(
-                pos,
-                preamble_end,
-                preamble_type,
-                "preamble",
-                dec,
+                pos, preamble_end, preamble_type,
+                "preamble", dec,
             )
         )
         pos = preamble_end
@@ -132,7 +137,9 @@ def analyze_frame(raw_bits: str) -> List[FrameSegment]:
     if has_preamble:
         gap_end = _detect_gap(raw_bits, pos)
         if gap_end > pos:
-            segments.append(FrameSegment(pos, gap_end, "nrz", "gap"))
+            segments.append(
+                FrameSegment(pos, gap_end, "nrz", "gap")
+            )
             pos = gap_end
 
     # Step 5: Detect data encoding
@@ -180,7 +187,7 @@ def analyze_frame(raw_bits: str) -> List[FrameSegment]:
                 # start by -1 (include last gap bit in data) and see
                 # if we get fewer violations → more decoded bits.
                 if pos > 0:
-                    alt_data = raw_bits[pos - 1 : pos + trail_start]
+                    alt_data = raw_bits[pos - 1: pos + trail_start]
                     alt_decoded = _manchester_decode(alt_data)
                     if len(alt_decoded) > len(decoded):
                         decoded = alt_decoded
@@ -197,11 +204,8 @@ def analyze_frame(raw_bits: str) -> List[FrameSegment]:
 
             segments.append(
                 FrameSegment(
-                    pos,
-                    pos + trail_start,
-                    data_encoding,
-                    "data",
-                    decoded,
+                    pos, pos + trail_start,
+                    data_encoding, "data", decoded,
                 )
             )
 
@@ -239,11 +243,21 @@ def get_frame_summary(segments: List[FrameSegment]) -> dict:
 
     return {
         "segments": len(segments),
-        "preamble_encoding": (preamble_seg.encoding if preamble_seg else "none"),
-        "preamble_bits": (preamble_seg.raw_bits if preamble_seg else 0),
-        "data_encoding": (data_seg.encoding if data_seg else "none"),
-        "data_bits_raw": (data_seg.raw_bits if data_seg else 0),
-        "data_bits_decoded": (len(data_seg.decoded_bits) if data_seg else 0),
+        "preamble_encoding": (
+            preamble_seg.encoding if preamble_seg else "none"
+        ),
+        "preamble_bits": (
+            preamble_seg.raw_bits if preamble_seg else 0
+        ),
+        "data_encoding": (
+            data_seg.encoding if data_seg else "none"
+        ),
+        "data_bits_raw": (
+            data_seg.raw_bits if data_seg else 0
+        ),
+        "data_bits_decoded": (
+            len(data_seg.decoded_bits) if data_seg else 0
+        ),
     }
 
 
@@ -338,7 +352,9 @@ def _detect_encoding(bits: str) -> str:
     return "nrz"
 
 
-def _detect_preamble(bits: str, start: int) -> Tuple[int, str]:
+def _detect_preamble(
+    bits: str, start: int
+) -> Tuple[int, str]:
     """
     Detect preamble pattern starting at 'start'.
 
@@ -369,7 +385,7 @@ def _detect_preamble(bits: str, start: int) -> Tuple[int, str]:
     # Try 2: Manchester pairs (1001 or 0110 repeating)
     man_end = start
     while man_end + 3 < len(bits):
-        chunk = bits[man_end : man_end + 4]
+        chunk = bits[man_end: man_end + 4]
         if chunk in ("1001", "0110"):
             man_end += 4
         else:
@@ -387,10 +403,10 @@ def _detect_preamble(bits: str, start: int) -> Tuple[int, str]:
     # Try 4: PWM preamble (100 or 110 repeating)
     pwm_end = start
     if remaining >= 6:
-        pwm_pattern = bits[start : start + 3]
+        pwm_pattern = bits[start: start + 3]
         if pwm_pattern in ("100", "110"):
             while pwm_end + 2 < len(bits):
-                chunk = bits[pwm_end : pwm_end + 3]
+                chunk = bits[pwm_end: pwm_end + 3]
                 if chunk == pwm_pattern:
                     pwm_end += 3
                 else:
@@ -419,7 +435,7 @@ def _detect_preamble(bits: str, start: int) -> Tuple[int, str]:
                     period = n + m
                     cycle_count = 1
                     while hdr_end + period <= len(bits):
-                        cycle = bits[hdr_end : hdr_end + period]
+                        cycle = bits[hdr_end: hdr_end + period]
                         ones = cycle.count("1")
                         zeros = cycle.count("0")
                         # Second cycle exact, rest ±1
@@ -501,7 +517,7 @@ def _detect_gap(bits: str, start: int) -> int:
 
     # Manchester violation gap (00 or 11 pairs)
     while pos + 1 < len(bits):
-        pair = bits[pos : pos + 2]
+        pair = bits[pos: pos + 2]
         if pair in ("00", "11"):
             pos += 2
         else:
@@ -514,7 +530,7 @@ def _manchester_decode(bits: str) -> str:
     """Manchester I decode: 01->1, 10->0, violations skipped."""
     decoded = ""
     for i in range(0, len(bits) - 1, 2):
-        pair = bits[i : i + 2]
+        pair = bits[i: i + 2]
         if pair == "01":
             decoded += "1"
         elif pair == "10":
@@ -529,7 +545,7 @@ def _pwm_decode(bits: str) -> str:
     i = 0
     while i < len(bits):
         if i + 2 < len(bits):
-            s = bits[i : i + 3]
+            s = bits[i: i + 3]
             if s == "100":
                 decoded += "1"
                 i += 3

@@ -61,7 +61,10 @@ class GridScene(ZoomableScene):
             y_values = list(np.arange(top, bottom, y_grid_size))
             lines = [
                 QLineF(x, rect.top(), x, bottom - fh * scale_y) for x in x_range
-            ] + [QLineF(rect.left(), y, rect.right(), y) for y in y_values]
+            ] + [
+                QLineF(rect.left(), y, rect.right(), y)
+                for y in y_values
+            ]
 
             pen = painter.pen()
             pen.setStyle(Qt.PenStyle.DotLine)
@@ -82,7 +85,10 @@ class GridScene(ZoomableScene):
 
                 value = Formatter.big_value_with_suffix(self.center_freq + freq, 2)
                 fw = self.font_metrics.horizontalAdvance(value)
-                painter.drawText(QPointF(x / scale_x - fw / 2, bottom / scale_y), value)
+                painter.drawText(
+                    QPointF(x / scale_x - fw / 2, bottom / scale_y), value
+                )
+
 
     def draw_frequency_marker(self, x_pos, frequency):
         if frequency is None:
