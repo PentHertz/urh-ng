@@ -167,43 +167,29 @@ def detect_modulation(data: np.ndarray, wavelet_scale=4, median_filter_order=11)
     if hasattr(data, "as_complex64"):
         data = data.as_complex64()
     elif not np.iscomplexobj(data):
-        if data.ndim == 2:
+        if hasattr(data, "ndim") and data.ndim == 2:
             data = data[:, 0].astype(np.float32) + 1j * data[:, 1].astype(np.float32)
         else:
-            data = data.astype(np.complex64)
+            data = np.asarray(data, dtype=np.complex64)
 
     n_data = len(data)
     if n_data < 4:
         return None
 
-    # ── Step 1: Amplitude analysis (decides ASK/OOK early) ─
+    # ── Step 1: Amplitude analysis ─────────────────────────
     magnitudes = np.abs(data)
     max_mag = float(np.max(magnitudes))
     if max_mag < 1e-10:
         return None
 
     mag_norm = magnitudes / max_mag
-
-    # Zero ratio
     zero_ratio = float(np.sum(mag_norm < 0.1)) / n_data
 
-    # OOK: signal clearly goes on/off
     if zero_ratio > 0.15:
         return "OOK"
 
-    # Amplitude coefficient of variation
     amp_mean = float(np.mean(mag_norm))
     amp_cv = float(np.std(mag_norm)) / amp_mean if amp_mean > 0 else 0
-
-    # ASK: amplitude variation > 0.15 (lower threshold to catch ASK
-    # before it reaches the FFT peak check which confuses ASK sidebands
-    # with FSK peaks)
-    if amp_cv > 0.15:
-        if float(np.sum(mag_norm < 0.3)) > n_data * 0.10:
-            return "OOK"
-        return "ASK"
-
-    # ── From here: constant envelope → FSK or PSK ─────────
 
     # ── Step 2: FFT multi-peak (FSK indicator) ─────────────
     fft_len = 2 ** int(np.log2(max(n_data, 16)))
@@ -255,17 +241,28 @@ def detect_modulation(data: np.ndarray, wavelet_scale=4, median_filter_order=11)
         n_sharp = int(np.sum(np.abs(phase_diff2) > 1.5))
         psk_jump_ratio = n_sharp / max(len(phase_diff2), 1)
 
-    # ── Classification (constant envelope only) ────────────
+    # ── Step 5: Constellation shape ────────────────────────
+    passes_origin = float(np.sum(mag_norm < 0.15)) / n_data
+
+    # ── Classification ─────────────────────────────────────
+
+    # High amplitude variation → ASK or OOK
+    if amp_cv > 0.25:
+        if float(np.sum(mag_norm < 0.3)) > n_data * 0.10:
+            return "OOK"
+        return "ASK"
+
+    # Constant envelope → FSK or PSK
 
     # FSK: two or more spectral peaks OR two frequency histogram levels
     if n_fft_peaks >= 2 or freq_peaks >= 2:
         return "FSK"
 
-    # PSK: sharp phase discontinuities
+    # PSK: sharp phase discontinuities (second-derivative spikes)
     if psk_jump_ratio > 0.02:
         return "PSK"
 
-    # ── Fallback: wavelet method for edge cases ────────────
+    # ── Fallback: wavelet for ambiguous cases ──────────────
     try:
         data_norm = data / max_mag
         mag_wavlt = np.abs(Wavelet.cwt_haar(data_norm, scale=wavelet_scale))
