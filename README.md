@@ -1,4 +1,4 @@
-![URH image](https://raw.githubusercontent.com/jopohl/urh/master/data/icons/banner.png)
+![URH image](https://raw.githubusercontent.com/Penthertz/urh-ng/master/data/icons/banner.png)
 
 # URH-NG: Universal Radio Hacker - Next Generation
 
