@@ -25,6 +25,7 @@ else:
     OPEN_MP_FLAG = "-fopenmp"
     NO_NUMPY_WARNINGS_FLAG = "-Wno-cpp"
 
+
 class build_ext(_build_ext):
     def finalize_options(self):
         _build_ext.finalize_options(self)
@@ -34,9 +35,11 @@ class build_ext(_build_ext):
         except ImportError:
             import __builtin__ as builtins
         builtins.__NUMPY_SETUP__ = False
-        
+
         import numpy
+
         self.include_dirs.append(numpy.get_include())
+
 
 def get_extensions():
     if ExtensionHelper is None:
@@ -65,7 +68,10 @@ def get_extensions():
     ]
 
     ExtensionHelper.USE_RELATIVE_PATHS = True
-    device_extensions, device_extras = ExtensionHelper.get_device_extensions_and_extras()
+    (
+        device_extensions,
+        device_extras,
+    ) = ExtensionHelper.get_device_extensions_and_extras()
     extensions += device_extensions
 
     if NO_NUMPY_WARNINGS_FLAG:
@@ -77,6 +83,7 @@ def get_extensions():
         compiler_directives=COMPILER_DIRECTIVES,
         compile_time_env=device_extras,
     )
+
 
 if __name__ == "__main__":
     setup(
