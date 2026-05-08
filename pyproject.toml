@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=61.0", "numpy<2.0", "cython"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "urh-ng"
+dynamic = ["version"]
+description = "URH-NG: Universal Radio Hacker - Next Gen. Investigate wireless protocols like a boss."
+readme = "README.md"
+authors = [
+    {name = "Sebastien Dudek", email = "sdudek@penthertz.com"}
+]
+maintainers = [
+    {name = "Sebastien Dudek (PentHertz)", email = "sdudek@penthertz.com"}
+]
+license = {text = "GNU General Public License (GPL)"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU General Public License (GPL)",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Libraries :: Python Modules"
+]
+requires-python = ">=3.9"
+dependencies = [
+    "numpy<2.0",
+    "psutil",
+    "cython",
+    "setuptools",
+    "PyQt6"
+]
+
+# TODO: move to correct urls when the weird forking structure of the repo is addressed
+[project.urls]
+Homepage = "https://github.com/PentHertz/URH"
+Download = "https://github.com/PentHertz/URH/releases"
+
+[project.scripts]
+urh-ng = "urh.main:main"
+urh = "urh.main:main"
+urh_cli = "urh.cli.urh_cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["urh*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "urh.version.VERSION"}
+
+[tool.setuptools.package-data]
+"urh.cythonext" = ["*.pyx", "*.pxd"]
+"urh.dev.native.lib" = ["*.pyx", "*.pxd"]
+"urh.plugins" = ["*/*.ui", "*/*.txt"]
+"urh.dev.native.lib.shared" = ["*.dll", "*.txt"]

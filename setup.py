@@ -1,25 +1,20 @@
 import os
 import sys
-import tempfile
+from setuptools import setup, Extension
+from setuptools.command.build_ext import build_ext as _build_ext
 
-if sys.version_info < (3, 9):
-    print("You need at least Python 3.9 for this application!")
-    if sys.version_info[0] < 3:
-        print("try running with python3 {}".format(" ".join(sys.argv)))
-    sys.exit(1)
+# Ensure src is in path for imports during build
+sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 
 try:
-    from setuptools import setup, Extension
-    from setuptools.command.build_ext import build_ext as _build_ext
+    from urh.dev.native import ExtensionHelper
+    from urh.dev.native.ExtensionHelper import COMPILER_DIRECTIVES
 except ImportError:
-    print("Could not find setuptools")
-    print("Try installing them with pip install setuptools")
-    sys.exit(1)
+    # This might happen if src/urh is not yet available or path is wrong
+    # But since we added it to sys.path, it should work.
+    ExtensionHelper = None
 
-from src.urh.dev.native import ExtensionHelper
-from src.urh.dev.native.ExtensionHelper import COMPILER_DIRECTIVES
-import src.urh.version as version
-
+# Platform-specific flags
 if sys.platform == "win32":
     OPEN_MP_FLAG = "/openmp"
     NO_NUMPY_WARNINGS_FLAG = ""
@@ -30,74 +25,29 @@ else:
     OPEN_MP_FLAG = "-fopenmp"
     NO_NUMPY_WARNINGS_FLAG = "-Wno-cpp"
 
-UI_SUBDIRS = ("actions", "delegates", "views")
-PLUGINS = [
-    path
-    for path in os.listdir("src/urh/plugins")
-    if os.path.isdir(os.path.join("src/urh/plugins", path))
-]
-URH_DIR = "urh"
-
-IS_RELEASE = os.path.isfile(os.path.join(tempfile.gettempdir(), "urh_releasing"))
-
-try:
-    from Cython.Build import cythonize
-except ImportError:
-    print(
-        "You need Cython to build URH's extensions!\n"
-        "You can get it e.g. with python3 -m pip install cython.",
-        file=sys.stderr,
-    )
-    sys.exit(1)
-
-
-def set_builtin(name, value):
-    if isinstance(__builtins__, dict):
-        __builtins__[name] = value
-    else:
-        # to support https://github.com/pypa/build
-        # see https://github.com/jopohl/urh/issues/1106
-        setattr(__builtins__, name, value)
-
-
 class build_ext(_build_ext):
     def finalize_options(self):
-        print("Finalizing options")
         _build_ext.finalize_options(self)
         # Prevent numpy from thinking it is still in its setup process:
-        set_builtin("__NUMPY_SETUP__", False)
+        try:
+            import builtins
+        except ImportError:
+            import __builtin__ as builtins
+        builtins.__NUMPY_SETUP__ = False
+        
         import numpy
-
         self.include_dirs.append(numpy.get_include())
 
-
-def get_packages():
-    packages = [URH_DIR]
-    separator = os.path.normpath("/")
-    for dirpath, dirnames, filenames in os.walk(os.path.join("./src/", URH_DIR)):
-        package_path = os.path.relpath(
-            dirpath, os.path.join("./src/", URH_DIR)
-        ).replace(separator, ".")
-        if len(package_path) > 1:
-            packages.append(URH_DIR + "." + package_path)
-
-    return packages
-
-
-def get_package_data():
-    package_data = {"urh.cythonext": ["*.pyx", "*.pxd"]}
-    for plugin in PLUGINS:
-        package_data["urh.plugins." + plugin] = ["*.ui", "*.txt"]
-
-    package_data["urh.dev.native.lib"] = ["*.pyx", "*.pxd"]
-
-    if IS_RELEASE and sys.platform == "win32":
-        package_data["urh.dev.native.lib.shared"] = ["*.dll", "*.txt"]
-
-    return package_data
-
-
 def get_extensions():
+    if ExtensionHelper is None:
+        return []
+
+    try:
+        from Cython.Build import cythonize
+    except ImportError:
+        print("Cython not found, skipping extension compilation", file=sys.stderr)
+        return []
+
     filenames = [
         os.path.splitext(f)[0]
         for f in os.listdir("src/urh/cythonext")
@@ -115,69 +65,21 @@ def get_extensions():
     ]
 
     ExtensionHelper.USE_RELATIVE_PATHS = True
-    (
-        device_extensions,
-        device_extras,
-    ) = ExtensionHelper.get_device_extensions_and_extras()
+    device_extensions, device_extras = ExtensionHelper.get_device_extensions_and_extras()
     extensions += device_extensions
 
     if NO_NUMPY_WARNINGS_FLAG:
         for extension in extensions:
             extension.extra_compile_args.append(NO_NUMPY_WARNINGS_FLAG)
 
-    extensions = cythonize(
+    return cythonize(
         extensions,
         compiler_directives=COMPILER_DIRECTIVES,
         compile_time_env=device_extras,
     )
-    return extensions
 
-
-def read_long_description():
-    try:
-        with open("README.md") as f:
-            text = f.read()
-        return text
-    except:
-        return ""
-
-
-install_requires = ["numpy<3.0", "psutil", "cython", "setuptools"]
-if IS_RELEASE:
-    install_requires.append("PyQt6")
-else:
-    try:
-        import PyQt6
-    except ImportError:
-        install_requires.append("PyQt6")
-
-setup(
-    name="urh-ng",
-    version=version.VERSION,
-    description="URH-NG: Universal Radio Hacker - Next Gen. Investigate wireless protocols like a boss.",
-    long_description=read_long_description(),
-    long_description_content_type="text/markdown",
-    author="Sebastien Dudek",
-    author_email="sdudek@penthertz.com",
-    maintainer="Sebastien Dudek (PentHertz)",
-    maintainer_email="sdudek@penthertz.com",
-    package_dir={"": "src"},
-    package_data=get_package_data(),
-    url="https://github.com/PentHertz/URH",
-    license="GNU General Public License (GPL)",
-    download_url="https://github.com/PentHertz/URH/tarball/v" + str(version.VERSION),
-    install_requires=install_requires,
-    setup_requires=["numpy<3.0"],
-    python_requires=">=3.9",
-    packages=get_packages(),
-    ext_modules=get_extensions(),
-    cmdclass={"build_ext": build_ext},
-    zip_safe=False,
-    entry_points={
-        "console_scripts": [
-            "urh-ng = urh.main:main",
-            "urh = urh.main:main",
-            "urh_cli = urh.cli.urh_cli:main",
-        ]
-    },
-)
+if __name__ == "__main__":
+    setup(
+        ext_modules=get_extensions(),
+        cmdclass={"build_ext": build_ext},
+    )
