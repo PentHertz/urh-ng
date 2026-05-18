@@ -4,46 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "urh-ng"
-description = "URH-NG: Universal Radio Hacker - Next Gen. Investigate wireless protocols like a boss."
-readme = "README.md"
+dynamic = [
+    "version",
+    "description",
+    "readme",
+    "dependencies",
+    "scripts",
+    "authors",
+    "maintainers",
+    "license",
+    "urls",
+]
 requires-python = ">=3.9"
-license = { text = "GPL-3.0-or-later" }
-authors = [{ name = "Sebastien Dudek", email = "sdudek@penthertz.com" }]
-maintainers = [
-    { name = "Sebastien Dudek (PentHertz)", email = "sdudek@penthertz.com" },
-]
-dependencies = [
-    "numpy<3.0",
-    "psutil",
-    "cython",
-    "setuptools",
-    "PyQt6",
-]
-dynamic = ["version"]
-
-[project.urls]
-Homepage = "https://github.com/PentHertz/URH"
-
-[project.scripts]
-"urh-ng" = "urh.main:main"
-urh = "urh.main:main"
-urh_cli = "urh.cli.urh_cli:main"
-
-[tool.setuptools]
-zip-safe = false
-
-[tool.setuptools.dynamic]
-version = { attr = "urh.version.VERSION" }
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.package-data]
-"urh.cythonext" = ["*.pyx", "*.pxd"]
-"urh.dev.native.lib" = ["*.pyx", "*.pxd"]
-"urh.plugins.FlipperZeroSub" = ["*.ui", "*.txt"]
-"urh.plugins.InsertSine" = ["*.ui", "*.txt"]
-"urh.plugins.MessageBreak" = ["*.ui", "*.txt"]
-"urh.plugins.NetworkSDRInterface" = ["*.ui", "*.txt"]
-"urh.plugins.RfCat" = ["*.ui", "*.txt"]
-"urh.plugins.ZeroHide" = ["*.ui", "*.txt"]
