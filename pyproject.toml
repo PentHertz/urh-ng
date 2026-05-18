@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=64", "wheel", "cython", "numpy<3.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "urh-ng"
+dynamic = [
+    "version",
+    "description",
+    "readme",
+    "dependencies",
+    "scripts",
+    "authors",
+    "maintainers",
+    "license",
+    "urls",
+]
+requires-python = ">=3.9"

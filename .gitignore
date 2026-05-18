@@ -54,3 +54,5 @@ src/urh/URHProject.xml
 src/urh/dev/gr/scripts/top_block.py
 
 misc/*
+var/
+src/urh_ng.egg-info

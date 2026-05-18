@@ -1,3 +1,4 @@
+import importlib.util
 import os
 import sys
 import tempfile
@@ -16,9 +17,20 @@ except ImportError:
     print("Try installing them with pip install setuptools")
     sys.exit(1)
 
-from src.urh.dev.native import ExtensionHelper
-from src.urh.dev.native.ExtensionHelper import COMPILER_DIRECTIVES
-import src.urh.version as version
+
+def _load_from_path(name, relpath):
+    abspath = os.path.join(os.path.dirname(os.path.abspath(__file__)), relpath)
+    spec = importlib.util.spec_from_file_location(name, abspath)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+ExtensionHelper = _load_from_path(
+    "urh_build.ExtensionHelper", "src/urh/dev/native/ExtensionHelper.py"
+)
+COMPILER_DIRECTIVES = ExtensionHelper.COMPILER_DIRECTIVES
+version = _load_from_path("urh_build.version", "src/urh/version.py")
 
 if sys.platform == "win32":
     OPEN_MP_FLAG = "/openmp"
