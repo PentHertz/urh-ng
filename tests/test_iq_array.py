@@ -164,6 +164,24 @@ class TestIQArray(unittest.TestCase):
             msg=iq64f,
         )
 
+    def test_magnitudes_int8_are_signed(self):
+        # Regression test for #1160: the Cython fused type used by
+        # get_magnitudes() must treat 8 bit samples as signed (matching
+        # IQArray.from_file's .complex16s/.cs8 handling) regardless of
+        # whether the host platform's plain "char" defaults to signed
+        # (x86) or unsigned (ARM/AArch64). If int8 samples were ever
+        # reinterpreted as unsigned, -128 would compute as if it were
+        # 128, producing a magnitude far larger than the correct value.
+        iq_array = IQArray(np.array([-128, -128], dtype=np.int8))
+        self.assertAlmostEqual(
+            iq_array.magnitudes[0], np.sqrt(128.0**2 + 128.0**2)
+        )
+
+        iq_array = IQArray(np.array([127, -128], dtype=np.int8))
+        self.assertAlmostEqual(
+            iq_array.magnitudes[0], np.sqrt(127.0**2 + 128.0**2)
+        )
+
     def test_conversion_iq64f(self):
         iq64f = IQArray(np.array([-1, 0, 0, 1], dtype=np.float32))
         self.assertTrue(
