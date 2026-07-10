@@ -111,7 +111,7 @@ class ChecksumEngine(Engine):
                         data_stop,
                         crc_start,
                         crc_stop,
-                        *crc_object.get_parameters()
+                        *crc_object.get_parameters(),
                     )
 
                     checksum_range.message_indices.update(matching)

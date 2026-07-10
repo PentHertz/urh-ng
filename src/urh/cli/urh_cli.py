@@ -700,7 +700,7 @@ def main():
                     for msg in receiver.messages[:num_messages]:
                         print(
                             msg.decoded_hex_str if args.hex else msg.decoded_bits_str,
-                            **kwargs
+                            **kwargs,
                         )
                     del receiver.messages[:num_messages]
             except KeyboardInterrupt:

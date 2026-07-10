@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=64", "wheel", "cython", "numpy<3.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "urh-ng"
+dynamic = ["version"]
+description = "URH-NG: Universal Radio Hacker - Next Gen. Investigate wireless protocols like a boss."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "GNU General Public License (GPL)" }
+authors = [{ name = "Sebastien Dudek", email = "sdudek@penthertz.com" }]
+maintainers = [{ name = "Sebastien Dudek (PentHertz)", email = "sdudek@penthertz.com" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU General Public License (GPL)",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+# numpy<3.0: URH runs fine on NumPy 2.x; the only hard cap is <3.0.
+# cython + setuptools are RUNTIME deps: URH compiles SDR device backends
+# on the fly at runtime via urh.dev.native.ExtensionHelper.
+dependencies = [
+    "numpy<3.0",
+    "psutil",
+    "cython",
+    "setuptools",
+    "PyQt6",
+]
+
+[project.urls]
+Homepage = "https://github.com/PentHertz/urh-ng"
+Download = "https://github.com/PentHertz/urh-ng/releases"
+
+[project.scripts]
+urh-ng = "urh.main:main"
+urh = "urh.main:main"
+urh_cli = "urh.cli.urh_cli:main"
+
+[tool.setuptools]
+zip-safe = false
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["urh*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "urh.version.VERSION" }
+
+[tool.setuptools.package-data]
+"urh.cythonext" = ["*.pyx", "*.pxd"]
+"urh.dev.native.lib" = ["*.pyx", "*.pxd"]
+"urh.plugins" = ["*/*.ui", "*/*.txt"]

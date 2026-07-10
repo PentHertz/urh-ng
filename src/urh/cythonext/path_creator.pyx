@@ -25,7 +25,7 @@ cpdef create_path(iq[:] samples, long long start, long long end, list subpath_ra
     cdef long long i,j,index, chunk_end, num_samples, pixels_on_path, samples_per_pixel
     num_samples = end - start
 
-    cdef dict type_lookup = {"char[:]": np.int8, "unsigned char[:]": np.uint8,
+    cdef dict type_lookup = {"signed char[:]": np.int8, "unsigned char[:]": np.uint8,
                              "short[:]": np.int16, "unsigned short[:]": np.uint16,
                              "float[:]": np.float32, "double[:]": np.float64}
 

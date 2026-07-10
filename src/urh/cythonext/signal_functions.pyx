@@ -44,7 +44,7 @@ cdef float get_noise_for_mod_type(str mod_type):
         return 0
 
 cdef get_numpy_dtype(iq cython_type):
-    if str(cython.typeof(cython_type)) == "char":
+    if str(cython.typeof(cython_type)) == "signed char":
         return np.int8
     elif str(cython.typeof(cython_type)) == "short":
         return np.int16
@@ -62,7 +62,7 @@ cpdef modulate_c(uint8_t[:] bits, uint32_t samples_per_symbol, str modulation_ty
     if dtype == np.int8:
         return __modulate(
             bits, samples_per_symbol, modulation_type, parameters, bits_per_symbol, carrier_amplitude,
-            carrier_frequency, carrier_phase, sample_rate, pause, start, <char>0, gauss_bt, filter_width
+            carrier_frequency, carrier_phase, sample_rate, pause, start, <signed char>0, gauss_bt, filter_width
         )
     elif dtype == np.int16:
         return __modulate(
@@ -264,7 +264,7 @@ cdef float[::1] costa_demod(IQ samples, float noise_sqrd, int loop_order, float 
 
     cdef float[::1] result = np.empty(num_samples, dtype=np.float32)
 
-    if str(cython.typeof(samples)) == "char[:, ::1]":
+    if str(cython.typeof(samples)) == "signed char[:, ::1]":
         scale = 127.5
         shift = 0.5
     elif str(cython.typeof(samples)) == "unsigned char[:, ::1]":
@@ -340,7 +340,7 @@ cpdef np.ndarray[np.float32_t, ndim=1] afp_demod(IQ samples, float noise_mag,
     cdef float noise_sqrd = noise_mag * noise_mag, real = 0, imag = 0, magnitude = 0, max_magnitude
     cdef float complex tmp
 
-    if str(cython.typeof(samples)) == "char[:, ::1]":
+    if str(cython.typeof(samples)) == "signed char[:, ::1]":
         max_magnitude = sqrt(127*127 + 128*128)
     elif str(cython.typeof(samples)) == "unsigned char[:, ::1]":
         max_magnitude = sqrt(255*255)
