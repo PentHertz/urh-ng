@@ -1,4 +1,4 @@
-name: Build URH Multi-Arch Packages
+name: Build URH Multi-Distro/Arch Packages
 
 on:
   workflow_dispatch:
@@ -11,6 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
+        release:
+          - codename: noble
+            version: "24.04"
+          - codename: resolute
+            version: "26.04"
         arch:
           - amd64
           - arm64
@@ -39,10 +44,10 @@ jobs:
           VERSION=$(python3 src/urh/version.py)
           DATE=$(date +%Y%m%d)
           COMMIT=$(git rev-parse --short HEAD)
-          DEB_VERSION="${VERSION}+git${DATE}.${COMMIT}"
+          DEB_VERSION="${VERSION}+git${DATE}.${COMMIT}~${{ matrix.release.codename }}"
           echo "deb_version=${DEB_VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Build for ${{ matrix.arch }}
+      - name: Build ${{ matrix.release.codename }} for ${{ matrix.arch }}
         run: |
           cat > build.sh << 'BUILDSCRIPT'
           #!/bin/bash
@@ -233,7 +238,7 @@ jobs:
           echo "[+] URH installed successfully with $BUILD_TYPE extensions"
           
           echo "[+] Checking compiled native extensions:"
-          find "$URH_VENV_DIR/lib/python3.12/site-packages/urh" -name "*.so" | while read so_file; do
+          find "$URH_VENV_DIR/lib/$PYTHON_VERSION/site-packages/urh" -name "*.so" | while read so_file; do
               basename "$so_file"
           done | sort || echo "No .so files found (pure Python build)"
           
@@ -284,11 +289,13 @@ jobs:
           Section: comm
           Priority: optional
           Architecture: ${ARCH}
-          Depends: python3-venv, python3
+          Depends: python3-venv, python3, python3-pyqt6, python3-pyqt6.sip, python3-pyqt6.qtsvg
           Recommends: rtl-sdr, hackrf, limesuite, uhd-host
           Maintainer: PentHertz <contact@penthertz.com>
           Description: Universal Radio Hacker (PentHertz Fork)
            URH is a complete suite for wireless protocol investigation.
+           .
+           Built for Ubuntu ${CODENAME} (${ARCH}).
            .
            This build includes native support for:
             * RTL-SDR (RTL2832U)
@@ -303,9 +310,8 @@ jobs:
             * Harogic spectrum analyzers
            .
            Build type: ${BUILD_TYPE} extensions
-           Architecture: ${ARCH}
            .
-           PyQt5 is included in the venv for GUI support.
+           GUI is provided by the system PyQt6 packages (pulled in via Depends).
           Homepage: https://github.com/PentHertz/urh
           CONTROL
           
@@ -333,18 +339,19 @@ jobs:
             -v "$(pwd)/build.sh:/build.sh:ro" \
             -v "$(pwd)/output:/output" \
             -e DEB_VERSION="${{ steps.version.outputs.deb_version }}" \
-            ubuntu:24.04 \
+            -e CODENAME="${{ matrix.release.codename }}" \
+            ubuntu:${{ matrix.release.version }} \
             bash /build.sh
-      
+
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: urh-${{ matrix.arch }}-${{ steps.version.outputs.deb_version }}
+          name: urh-${{ matrix.release.codename }}-${{ matrix.arch }}-${{ steps.version.outputs.deb_version }}
           path: output/*.deb
-      
+
       - name: Show result
         run: |
-          echo "Package built for ${{ matrix.arch }}"
+          echo "Package built for ${{ matrix.release.codename }} (${{ matrix.arch }})"
           ls -lh output/
   
   release:
@@ -393,34 +400,33 @@ jobs:
           tag_name: v${{ steps.version.outputs.version }}
           name: URH PentHertz v${{ steps.version.outputs.version }}
           body: |
-            # URH Multi-Architecture Packages
+            # URH Multi-Distro / Multi-Architecture Packages
             
             **Version:** ${{ steps.version.outputs.version }}  
             **Build Date:** ${{ steps.version.outputs.date }}  
             **Commit:** ${{ steps.version.outputs.commit }}
             
             ## 📦 Packages
-            
-            - `urh-penthertz_amd64_*.deb` - For AMD64/x86_64 systems
-            - `urh-penthertz_arm64_*.deb` - For ARM64/aarch64 systems  
-            - `urh-penthertz_riscv64_*.deb` - For RISC-V 64-bit systems
-            
+
+            Built for **Ubuntu 24.04 (noble)** and **Ubuntu 26.04 (resolute)**, each in
+            three architectures. Pick the file matching your Ubuntu release (`~noble` or
+            `~resolute`) and CPU:
+
+            - `urh-penthertz_amd64_*~<codename>.deb` - AMD64/x86_64
+            - `urh-penthertz_arm64_*~<codename>.deb` - ARM64/aarch64
+            - `urh-penthertz_riscv64_*~<codename>.deb` - RISC-V 64-bit
+
             ## 🚀 Quick Download
-            
+
             ```bash
-            # AMD64
-            wget https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/urh-penthertz_amd64_${{ steps.version.outputs.deb_version }}.deb
-            
-            # ARM64
-            wget https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/urh-penthertz_arm64_${{ steps.version.outputs.deb_version }}.deb
-            
-            # RISC-V
-            wget https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/urh-penthertz_riscv64_${{ steps.version.outputs.deb_version }}.deb
-            
+            # Example: AMD64 on Ubuntu 24.04 (noble). For 26.04 use ~resolute,
+            # and swap amd64 for arm64/riscv64 as needed.
+            wget https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/urh-penthertz_amd64_${{ steps.version.outputs.deb_version }}~noble.deb
+
             # Install
             sudo dpkg -i urh-penthertz_*.deb
             sudo apt-get install -f
-            
+
             # Run
             urh
             ```
@@ -439,14 +445,13 @@ jobs:
             
             - **Native SDR Support:** RTL-SDR, HackRF, AirSpy, PlutoSDR, LimeSDR, BladeRF, USRP, FUNcube Dongle, HydraSDR, Harogic
             - **Cython Extensions:** Optimized signal processing
-            - **Complete GUI:** PyQt5 interface included
-            - **Self-contained:** All dependencies in venv
-            
+            - **Complete GUI:** PyQt6 interface (system packages, pulled in via Depends)
+            - **Self-contained:** All Python dependencies in venv
+
             ## 📋 System Requirements
-            
-            - Ubuntu 24.04 or compatible Debian-based system
-            - Python 3.12
-            - Qt5 runtime libraries (auto-installed)
+
+            - Ubuntu 24.04 (noble) or 26.04 (resolute), or a compatible Debian-based system
+            - Qt6 runtime libraries and python3-pyqt6 (auto-installed via Depends)
             
             ## 🔍 Verification
             
