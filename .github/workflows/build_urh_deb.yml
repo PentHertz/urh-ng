@@ -2,6 +2,9 @@ name: Build URH Multi-Arch Packages
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   build:
@@ -33,19 +36,12 @@ jobs:
       - name: Get version
         id: version
         run: |
-          cat > get_version.py << 'EOF'
-          import re
-          with open('setup.py') as f:
-              content = f.read()
-          match = re.search(r'version\s*=\s*["\x27]([^"\x27]+)["\x27]', content)
-          print(match.group(1) if match else '0.0.1')
-          EOF
-          VERSION=$(python3 get_version.py)
+          VERSION=$(python3 src/urh/version.py)
           DATE=$(date +%Y%m%d)
           COMMIT=$(git rev-parse --short HEAD)
           DEB_VERSION="${VERSION}+git${DATE}.${COMMIT}"
           echo "deb_version=${DEB_VERSION}" >> $GITHUB_OUTPUT
-      
+
       - name: Build for ${{ matrix.arch }}
         run: |
           cat > build.sh << 'BUILDSCRIPT'
@@ -366,14 +362,7 @@ jobs:
       - name: Get version
         id: version
         run: |
-          cat > get_version.py << 'EOF'
-          import re
-          with open('setup.py') as f:
-              content = f.read()
-          match = re.search(r'version\s*=\s*["\x27]([^"\x27]+)["\x27]', content)
-          print(match.group(1) if match else '0.0.1')
-          EOF
-          VERSION=$(python3 get_version.py)
+          VERSION=$(python3 src/urh/version.py)
           DATE=$(date +%Y%m%d)
           COMMIT=$(git rev-parse --short HEAD)
           DEB_VERSION="${VERSION}+git${DATE}.${COMMIT}"

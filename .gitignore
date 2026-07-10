@@ -1,56 +1,87 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[codz]
+*$py.class
+
 # C extensions
 *.so
 
-.coverage
-
-.pytest_cache
-
-# Pycharm
-.idea/
-
-venv/
-
-src/__pycache__/
-src/urh/__pycache__/
-__pycache__/
+# Distribution / packaging
+.Python
 build/
-src/urh/awre/__pycache__/
-src/urh/awre/components/__pycache__/
-src/urh/controller/__pycache__/
-src/urh/cythonext/__pycache__/
-src/urh/dev/__pycache__/
-src/urh/dev/gr/__pycache__/
-*.pyc
-src/urh/dev/native/__pycache__/
-src/urh/dev/native/lib/__pycache__/
-src/urh/models/__pycache__/
-src/urh/plugins/MessageBreak/__pycache__/
-src/urh/plugins/ZeroHide/__pycache__/
-src/urh/plugins/__pycache__/
-src/urh/signalprocessing/__pycache__/
-src/urh/ui/__pycache__/
-src/urh/ui/actions/__pycache__/
-src/urh/ui/delegates/__pycache__/
-src/urh/ui/views/__pycache__/
-src/urh/util/__pycache__/
-tmp/
+develop-eggs/
 dist/
-src/urh.egg-info/
-.cache/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.py.cover
+*.lcov
+.hypothesis/
+cover/
+
+# Environments
+.env
+.envrc
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs and Editors
+.idea/
+.vscode/
+.spyderproject
+.spyproject
+.ropeproject
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+
+# --- URH Specific Ignores ---
+tmp/
 tests/data/URHProject.xml
 src/urh/cythonext/*.html
 src/urh/cythonext/*.c
 src/urh/cythonext/*.cpp
-
 src/urh/dev/native/lib/*.html
 src/urh/dev/native/lib/*.c
 src/urh/dev/native/lib/*.cpp
-
 /tests/show_gui
-
 src/urh/*.txt
 src/urh/URHProject.xml
-.coverage*
 src/urh/dev/gr/scripts/top_block.py
-
 misc/*

@@ -193,6 +193,11 @@ jobs:
 
       - name: Run pytest with coverage
         if: ${{ startsWith(matrix.os, 'ubuntu') && matrix.python-version == '3.12' }}
+        env:
+          # Force coverage's classic C tracer instead of the Python 3.12
+          # sys.monitoring core, which segfaults when tracing the Qt GUI
+          # tests that fork native SDR device processes.
+          COVERAGE_CORE: ctrace
         run: |
           touch tests/show_gui
           cp tests/.coveragerc .
