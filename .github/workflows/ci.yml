@@ -193,15 +193,21 @@ jobs:
 
       - name: Run pytest with coverage
         if: ${{ startsWith(matrix.os, 'ubuntu') && matrix.python-version == '3.12' }}
-        env:
-          # Force coverage's classic C tracer instead of the Python 3.12
-          # sys.monitoring core, which segfaults when tracing the Qt GUI
-          # tests that fork native SDR device processes.
-          COVERAGE_CORE: ctrace
         run: |
           touch tests/show_gui
           cp tests/.coveragerc .
-          pytest -s -v --junitxml=junit/test-results.xml --cov=src --cov-config=.coveragerc tests
+          # The GUI dialog tests below segfault under coverage's tracer: they
+          # drive Qt dialogs that instantiate native SDR device backends, and
+          # the tracer + fork + native extensions crash the interpreter (only
+          # under coverage -- every non-coverage matrix job runs them fine).
+          # Run the rest of the suite under coverage, then run those modules on
+          # their own without instrumentation so they are still exercised in CI.
+          pytest -s -v --junitxml=junit/test-results.xml --cov=src --cov-config=.coveragerc \
+              --ignore=tests/test_send_recv_dialog_gui.py \
+              --ignore=tests/test_simulator_dialog.py \
+              tests
+          pytest -s -v --junitxml=junit/test-results-gui.xml \
+              tests/test_send_recv_dialog_gui.py tests/test_simulator_dialog.py
           coverage xml
           coverage html
 
