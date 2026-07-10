@@ -313,6 +313,31 @@ class TestCRC(unittest.TestCase):
         # print("Performance:", t1/runs)
         self.assertLess(t1 / runs, 0.1)  # Should be faster than 100ms in average
 
+    def test_data_range_with_reflected_output(self):
+        # Regression test: the bit-reversal loop in get_crc_datarange wrote its
+        # result to steps[j] instead of steps[i], so with reverse_all (ref_out)
+        # set it could never find a data range that doesn't start at bit 0.
+        # This broke checksum auto-detection for all reflected standards in
+        # STANDARD_CHECKSUMS (CRC16 default, CRC16 CCITT, CRC8 Bluetooth, ...).
+        c = GenericCRC(
+            polynomial="16_ccitt",
+            start_value=False,
+            final_xor=False,
+            reverse_polynomial=False,
+            reverse_all=True,
+            lsb_first=False,
+            little_endian=False,
+        )
+        # same frame layout as test_bruteforce_parameters_and_data_range:
+        # 84 garbage bits + 88 data bits + 16 crc bits + 1 trailing bit
+        prefix_and_data = "1010101010101010100000001110000000000000111000000010110100101101000000001110000001010010100001000000000001001110011111100100000000110111111110010011011000011000101000000000"
+        data_start, data_end = 84, 172
+        vrfy_crc = c.bit2str(c.crc(c.str2arr(prefix_and_data[data_start:data_end])))
+        inpt = prefix_and_data + vrfy_crc + "0"
+
+        result = c.get_crc_datarange(c.str2arr(inpt), len(inpt) - len(vrfy_crc) - 1)
+        self.assertEqual(result, (data_start, data_end))
+
     def test_adaptive_crc_calculation(self):
         c = GenericCRC(
             polynomial="16_ccitt",
