@@ -264,7 +264,7 @@ cpdef tuple get_crc_datarange(uint8_t[:] inpt, uint8_t[:] polynomial, uint64_t v
                 for j in range(0, poly_order - 1):
                     if steps[i] & (1 << j):
                         temp |= (1 << (poly_order -2  - j))
-                steps[j] = temp & crc_mask
+                steps[i] = temp & crc_mask
 
             # little endian encoding, different for 16, 32, 64 bit
             if poly_order - 1 == 16 and little_endian:
