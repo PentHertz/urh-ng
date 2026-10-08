@@ -11,6 +11,13 @@ from urh.cythonext import util
 from urh.signalprocessing.IQArray import IQArray
 
 
+# Minimum segment length (samples) for the spectral FSK tests. On shorter
+# segments the frequency resolution is too low and one strong tone already
+# produces several FFT/histogram maxima, so a single OOK pulse is misclassified
+# as FSK. A real FSK burst spans several symbols and is longer than this.
+MIN_SPECTRAL_SAMPLES = 2048
+
+
 def max_without_outliers(data: np.ndarray, z=3):
     if len(data) == 0:
         return None
@@ -273,28 +280,30 @@ def detect_modulation(data: np.ndarray, wavelet_scale=4, median_filter_order=11)
     amp_cv = float(np.std(mag_norm)) / amp_mean if amp_mean > 0 else 0
 
     # ── Step 2: FFT multi-peak (FSK indicator) ─────────────
-    fft_len = 2 ** int(np.log2(max(n_data, 16)))
-    fft_mag = np.abs(np.fft.fftshift(np.fft.fft(data[:fft_len])))
-    fft_db = 20.0 * np.log10(np.maximum(fft_mag, 1e-20))
-    fft_max_db = float(np.max(fft_db))
-
-    peak_thr = fft_max_db - 30
-    min_peak_dist = max(fft_len // 50, 2)
-    fft_peaks = []
-    for i in range(1, len(fft_db) - 1):
-        if (
-            float(fft_db[i]) > float(fft_db[i - 1])
-            and float(fft_db[i]) > float(fft_db[i + 1])
-            and float(fft_db[i]) > peak_thr
-        ):
-            if all(abs(i - p) >= min_peak_dist for p in fft_peaks):
-                fft_peaks.append(i)
-    n_fft_peaks = len(fft_peaks)
+    spectral_usable = n_data >= MIN_SPECTRAL_SAMPLES
+    n_fft_peaks = 0
+    if spectral_usable:
+        fft_len = 2 ** int(np.log2(max(n_data, 16)))
+        fft_mag = np.abs(np.fft.fftshift(np.fft.fft(data[:fft_len])))
+        fft_db = 20.0 * np.log10(np.maximum(fft_mag, 1e-20))
+        fft_max_db = float(np.max(fft_db))
+        peak_thr = fft_max_db - 30
+        min_peak_dist = max(fft_len // 50, 2)
+        fft_peaks = []
+        for i in range(1, len(fft_db) - 1):
+            if (
+                float(fft_db[i]) > float(fft_db[i - 1])
+                and float(fft_db[i]) > float(fft_db[i + 1])
+                and float(fft_db[i]) > peak_thr
+            ):
+                if all(abs(i - p) >= min_peak_dist for p in fft_peaks):
+                    fft_peaks.append(i)
+        n_fft_peaks = len(fft_peaks)
 
     # ── Step 3: Instantaneous frequency histogram ──────────
     phase_diff = np.diff(np.unwrap(np.angle(data)))
     freq_peaks = 0
-    if len(phase_diff) > 4:
+    if spectral_usable and len(phase_diff) > 4:
         pd_std = float(np.std(phase_diff))
         if pd_std > 1e-6:
             n_bins = min(64, max(8, n_data // 50))
@@ -560,7 +569,7 @@ def estimate(iq_array: IQArray, noise: float = None, modulation: str = None) -> 
     if modulation is None:
         return None
 
-    if modulation == "OOK":
+    if modulation in ("OOK", "ASK"):
         message_indices = merge_message_segments_for_ook(message_indices)
 
     if modulation == "OOK" or modulation == "ASK":
@@ -582,8 +591,9 @@ def estimate(iq_array: IQArray, noise: float = None, modulation: str = None) -> 
         if center is None:
             continue
 
+        plateau_percentage = 100 if modulation in ("OOK", "ASK") else 25
         plateau_lengths = c_auto_interpretation.get_plateau_lengths(
-            msg_rect_data, center, percentage=25
+            msg_rect_data, center, percentage=plateau_percentage
         )
         tolerance = estimate_tolerance_from_plateau_lengths(plateau_lengths)
         if tolerance is None:
