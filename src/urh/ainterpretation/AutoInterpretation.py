@@ -91,6 +91,87 @@ def detect_noise_level(magnitudes):
     return math.ceil(result * 10000) / 10000
 
 
+def otsu_threshold(magnitudes) -> float:
+    """
+    Otsu's threshold of a magnitude histogram: the level that minimises the
+    intra-class variance of the two groups it separates. For a magnitude
+    envelope that is bimodal (a low noise mode and a high signal mode) this is
+    a robust separation level. Returns 0 when the histogram is degenerate.
+
+    :param magnitudes: 1-D array of magnitudes
+    :return: threshold in the same units as ``magnitudes`` (0 if not well defined)
+    """
+    m = np.asarray(magnitudes, dtype=np.float64)
+    if m.size < 16:
+        return 0.0
+
+    low, high = float(np.min(m)), float(np.max(m))
+    if not np.isfinite(low) or not np.isfinite(high) or high <= low:
+        return 0.0
+
+    hist, edges = np.histogram(m, bins=64)
+    hist = hist.astype(np.float64)
+    centers = 0.5 * (edges[:-1] + edges[1:])
+
+    total = hist.sum()
+    weight_low = np.cumsum(hist)
+    weight_high = total - weight_low
+    sum_low = np.cumsum(hist * centers)
+    sum_all = sum_low[-1]
+
+    valid = (weight_low > 0) & (weight_high > 0)
+    if not np.any(valid):
+        return 0.0
+
+    mean_low = np.divide(
+        sum_low, weight_low, out=np.zeros_like(sum_low), where=weight_low > 0
+    )
+    mean_high = np.divide(
+        sum_all - sum_low,
+        weight_high,
+        out=np.zeros_like(sum_low),
+        where=weight_high > 0,
+    )
+    between_class_variance = weight_low * weight_high * (mean_low - mean_high) ** 2
+    between_class_variance[~valid] = -1.0
+
+    best = int(np.argmax(between_class_variance))
+    return float(centers[best])
+
+
+def segmentation_threshold(magnitudes, noise_level: float) -> float:
+    """
+    Threshold used to split the magnitude envelope into messages.
+
+    :func:`detect_noise_level` returns the maximum over the quietest chunks. It
+    is a useful noise estimate but is *not* guaranteed to separate noise from
+    signal: a deep fade makes the minimum chunk mean an outlier and the returned
+    value far too low (almost the whole buffer is then classified as signal, so
+    no messages are split), while in low-SNR recordings it can exceed the
+    carrier (nothing is classified as signal). Otsu's histogram threshold is
+    robust to both, so it is preferred whenever it is well defined.
+
+    :param magnitudes: 1-D array of magnitudes
+    :param noise_level: result of :func:`detect_noise_level` (0 disables detection)
+    :return: a robust threshold for message segmentation
+    """
+    if noise_level is None or noise_level <= 0:
+        return 0
+
+    m = np.asarray(magnitudes)
+    if m.size == 0:
+        return 0
+    # Fraction of samples the noise floor classifies as signal. A usable level
+    # leaves the quiet majority below it; if almost everything or almost nothing
+    # is above it, the floor is not a separation level.
+    above = float(np.count_nonzero(m > noise_level)) / m.size
+    if 0.05 <= above <= 0.6:
+        return noise_level
+
+    otsu = otsu_threshold(m)
+    return otsu if otsu > 0 else noise_level
+
+
 def segment_messages_from_magnitudes(magnitudes: np.ndarray, noise_threshold: float):
     """
     Get the list of start, end indices of messages
@@ -460,10 +541,14 @@ def estimate(iq_array: IQArray, noise: float = None, modulation: str = None) -> 
     magnitudes = iq_array.magnitudes
     # find noise threshold
     noise = detect_noise_level(magnitudes) if noise is None else noise
+    # detect_noise_level is a noise *estimate*; use a robust separation level for
+    # segmenting and demodulating, so a deep fade or a high noise floor does not
+    # break message detection (see segmentation_threshold).
+    segmentation = segmentation_threshold(magnitudes, noise)
 
     # segment messages
     message_indices = segment_messages_from_magnitudes(
-        magnitudes, noise_threshold=noise
+        magnitudes, noise_threshold=segmentation
     )
 
     # detect modulation
@@ -479,11 +564,11 @@ def estimate(iq_array: IQArray, noise: float = None, modulation: str = None) -> 
         message_indices = merge_message_segments_for_ook(message_indices)
 
     if modulation == "OOK" or modulation == "ASK":
-        data = signal_functions.afp_demod(iq_array.data, noise, "ASK", 2)
+        data = signal_functions.afp_demod(iq_array.data, segmentation, "ASK", 2)
     elif modulation == "FSK":
-        data = signal_functions.afp_demod(iq_array.data, noise, "FSK", 2)
+        data = signal_functions.afp_demod(iq_array.data, segmentation, "FSK", 2)
     elif modulation == "PSK":
-        data = signal_functions.afp_demod(iq_array.data, noise, "PSK", 2)
+        data = signal_functions.afp_demod(iq_array.data, segmentation, "PSK", 2)
     else:
         raise ValueError("Unsupported Modulation")
 
