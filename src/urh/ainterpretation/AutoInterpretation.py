@@ -11,6 +11,13 @@ from urh.cythonext import util
 from urh.signalprocessing.IQArray import IQArray
 
 
+# Minimum segment length (samples) for the spectral FSK tests. On shorter
+# segments the frequency resolution is too low and one strong tone already
+# produces several FFT/histogram maxima, so a single OOK pulse is misclassified
+# as FSK. A real FSK burst spans several symbols and is longer than this.
+MIN_SPECTRAL_SAMPLES = 2048
+
+
 def max_without_outliers(data: np.ndarray, z=3):
     if len(data) == 0:
         return None
@@ -89,6 +96,87 @@ def detect_noise_level(magnitudes):
 
     # Round up to fourth digit
     return math.ceil(result * 10000) / 10000
+
+
+def otsu_threshold(magnitudes) -> float:
+    """
+    Otsu's threshold of a magnitude histogram: the level that minimises the
+    intra-class variance of the two groups it separates. For a magnitude
+    envelope that is bimodal (a low noise mode and a high signal mode) this is
+    a robust separation level. Returns 0 when the histogram is degenerate.
+
+    :param magnitudes: 1-D array of magnitudes
+    :return: threshold in the same units as ``magnitudes`` (0 if not well defined)
+    """
+    m = np.asarray(magnitudes, dtype=np.float64)
+    if m.size < 16:
+        return 0.0
+
+    low, high = float(np.min(m)), float(np.max(m))
+    if not np.isfinite(low) or not np.isfinite(high) or high <= low:
+        return 0.0
+
+    hist, edges = np.histogram(m, bins=64)
+    hist = hist.astype(np.float64)
+    centers = 0.5 * (edges[:-1] + edges[1:])
+
+    total = hist.sum()
+    weight_low = np.cumsum(hist)
+    weight_high = total - weight_low
+    sum_low = np.cumsum(hist * centers)
+    sum_all = sum_low[-1]
+
+    valid = (weight_low > 0) & (weight_high > 0)
+    if not np.any(valid):
+        return 0.0
+
+    mean_low = np.divide(
+        sum_low, weight_low, out=np.zeros_like(sum_low), where=weight_low > 0
+    )
+    mean_high = np.divide(
+        sum_all - sum_low,
+        weight_high,
+        out=np.zeros_like(sum_low),
+        where=weight_high > 0,
+    )
+    between_class_variance = weight_low * weight_high * (mean_low - mean_high) ** 2
+    between_class_variance[~valid] = -1.0
+
+    best = int(np.argmax(between_class_variance))
+    return float(centers[best])
+
+
+def segmentation_threshold(magnitudes, noise_level: float) -> float:
+    """
+    Threshold used to split the magnitude envelope into messages.
+
+    :func:`detect_noise_level` returns the maximum over the quietest chunks. It
+    is a useful noise estimate but is *not* guaranteed to separate noise from
+    signal: a deep fade makes the minimum chunk mean an outlier and the returned
+    value far too low (almost the whole buffer is then classified as signal, so
+    no messages are split), while in low-SNR recordings it can exceed the
+    carrier (nothing is classified as signal). Otsu's histogram threshold is
+    robust to both, so it is preferred whenever it is well defined.
+
+    :param magnitudes: 1-D array of magnitudes
+    :param noise_level: result of :func:`detect_noise_level` (0 disables detection)
+    :return: a robust threshold for message segmentation
+    """
+    if noise_level is None or noise_level <= 0:
+        return 0
+
+    m = np.asarray(magnitudes)
+    if m.size == 0:
+        return 0
+    # Fraction of samples the noise floor classifies as signal. A usable level
+    # leaves the quiet majority below it; if almost everything or almost nothing
+    # is above it, the floor is not a separation level.
+    above = float(np.count_nonzero(m > noise_level)) / m.size
+    if 0.05 <= above <= 0.6:
+        return noise_level
+
+    otsu = otsu_threshold(m)
+    return otsu if otsu > 0 else noise_level
 
 
 def segment_messages_from_magnitudes(magnitudes: np.ndarray, noise_threshold: float):
@@ -192,28 +280,30 @@ def detect_modulation(data: np.ndarray, wavelet_scale=4, median_filter_order=11)
     amp_cv = float(np.std(mag_norm)) / amp_mean if amp_mean > 0 else 0
 
     # ── Step 2: FFT multi-peak (FSK indicator) ─────────────
-    fft_len = 2 ** int(np.log2(max(n_data, 16)))
-    fft_mag = np.abs(np.fft.fftshift(np.fft.fft(data[:fft_len])))
-    fft_db = 20.0 * np.log10(np.maximum(fft_mag, 1e-20))
-    fft_max_db = float(np.max(fft_db))
-
-    peak_thr = fft_max_db - 30
-    min_peak_dist = max(fft_len // 50, 2)
-    fft_peaks = []
-    for i in range(1, len(fft_db) - 1):
-        if (
-            float(fft_db[i]) > float(fft_db[i - 1])
-            and float(fft_db[i]) > float(fft_db[i + 1])
-            and float(fft_db[i]) > peak_thr
-        ):
-            if all(abs(i - p) >= min_peak_dist for p in fft_peaks):
-                fft_peaks.append(i)
-    n_fft_peaks = len(fft_peaks)
+    spectral_usable = n_data >= MIN_SPECTRAL_SAMPLES
+    n_fft_peaks = 0
+    if spectral_usable:
+        fft_len = 2 ** int(np.log2(max(n_data, 16)))
+        fft_mag = np.abs(np.fft.fftshift(np.fft.fft(data[:fft_len])))
+        fft_db = 20.0 * np.log10(np.maximum(fft_mag, 1e-20))
+        fft_max_db = float(np.max(fft_db))
+        peak_thr = fft_max_db - 30
+        min_peak_dist = max(fft_len // 50, 2)
+        fft_peaks = []
+        for i in range(1, len(fft_db) - 1):
+            if (
+                float(fft_db[i]) > float(fft_db[i - 1])
+                and float(fft_db[i]) > float(fft_db[i + 1])
+                and float(fft_db[i]) > peak_thr
+            ):
+                if all(abs(i - p) >= min_peak_dist for p in fft_peaks):
+                    fft_peaks.append(i)
+        n_fft_peaks = len(fft_peaks)
 
     # ── Step 3: Instantaneous frequency histogram ──────────
     phase_diff = np.diff(np.unwrap(np.angle(data)))
     freq_peaks = 0
-    if len(phase_diff) > 4:
+    if spectral_usable and len(phase_diff) > 4:
         pd_std = float(np.std(phase_diff))
         if pd_std > 1e-6:
             n_bins = min(64, max(8, n_data // 50))
@@ -460,10 +550,14 @@ def estimate(iq_array: IQArray, noise: float = None, modulation: str = None) -> 
     magnitudes = iq_array.magnitudes
     # find noise threshold
     noise = detect_noise_level(magnitudes) if noise is None else noise
+    # detect_noise_level is a noise *estimate*; use a robust separation level for
+    # segmenting and demodulating, so a deep fade or a high noise floor does not
+    # break message detection (see segmentation_threshold).
+    segmentation = segmentation_threshold(magnitudes, noise)
 
     # segment messages
     message_indices = segment_messages_from_magnitudes(
-        magnitudes, noise_threshold=noise
+        magnitudes, noise_threshold=segmentation
     )
 
     # detect modulation
@@ -475,15 +569,15 @@ def estimate(iq_array: IQArray, noise: float = None, modulation: str = None) -> 
     if modulation is None:
         return None
 
-    if modulation == "OOK":
+    if modulation in ("OOK", "ASK"):
         message_indices = merge_message_segments_for_ook(message_indices)
 
     if modulation == "OOK" or modulation == "ASK":
-        data = signal_functions.afp_demod(iq_array.data, noise, "ASK", 2)
+        data = signal_functions.afp_demod(iq_array.data, segmentation, "ASK", 2)
     elif modulation == "FSK":
-        data = signal_functions.afp_demod(iq_array.data, noise, "FSK", 2)
+        data = signal_functions.afp_demod(iq_array.data, segmentation, "FSK", 2)
     elif modulation == "PSK":
-        data = signal_functions.afp_demod(iq_array.data, noise, "PSK", 2)
+        data = signal_functions.afp_demod(iq_array.data, segmentation, "PSK", 2)
     else:
         raise ValueError("Unsupported Modulation")
 
@@ -497,8 +591,9 @@ def estimate(iq_array: IQArray, noise: float = None, modulation: str = None) -> 
         if center is None:
             continue
 
+        plateau_percentage = 100 if modulation in ("OOK", "ASK") else 25
         plateau_lengths = c_auto_interpretation.get_plateau_lengths(
-            msg_rect_data, center, percentage=25
+            msg_rect_data, center, percentage=plateau_percentage
         )
         tolerance = estimate_tolerance_from_plateau_lengths(plateau_lengths)
         if tolerance is None:
